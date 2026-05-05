@@ -1,0 +1,5 @@
+node_modules/
+.expo/
+*.json.lock
+cricket.json
+.env

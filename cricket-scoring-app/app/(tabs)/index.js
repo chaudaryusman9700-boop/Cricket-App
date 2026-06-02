@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
@@ -27,6 +27,14 @@ const WEATHER_API_KEY = '2044c6ee71414f0d858bd4bcbd55e041';
 
 export default function SetupScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const scheduledMatch = (() => {
+    try {
+      return params?.scheduledMatch ? JSON.parse(params.scheduledMatch) : null;
+    } catch {
+      return null;
+    }
+  })();
   const [step, setStep] = useState(1);
   const [resumeMatch, setResumeMatch] = useState(null);
   const [showResume, setShowResume] = useState(false);
@@ -85,7 +93,17 @@ export default function SetupScreen() {
       ]
     );
   };
-  const [setup, setSetup] = useState(DEFAULT_SETUP);
+  const [setup, setSetup] = useState(() => {
+    if (!scheduledMatch) return DEFAULT_SETUP;
+    return {
+      ...DEFAULT_SETUP,
+      teamAName: scheduledMatch.teamAName || DEFAULT_SETUP.teamAName,
+      teamBName: scheduledMatch.teamBName || DEFAULT_SETUP.teamBName,
+      venue: scheduledMatch.venue || '',
+      matchDate: scheduledMatch.matchDate || DEFAULT_SETUP.matchDate,
+      matchTime: scheduledMatch.matchTime || DEFAULT_SETUP.matchTime,
+    };
+  });
   const [newPlayerA, setNewPlayerA] = useState('');
   const [newPlayerB, setNewPlayerB] = useState('');
   const [weather, setWeather] = useState(null);
@@ -322,6 +340,18 @@ export default function SetupScreen() {
     >
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       <Text style={styles.title}>Match Setup</Text>
+      {scheduledMatch ? (
+        <View style={styles.scheduleBanner}>
+          <Text style={styles.scheduleBannerTitle}>Scheduled match loaded</Text>
+          <Text style={styles.scheduleBannerText}>
+            {scheduledMatch.teamAName} vs {scheduledMatch.teamBName} · {scheduledMatch.matchDate} {scheduledMatch.matchTime}
+          </Text>
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.scheduleLink} onPress={() => router.push('/schedule')}>
+          <Text style={styles.scheduleLinkText}>Schedule an upcoming match</Text>
+        </TouchableOpacity>
+      )}
       <ResumeCard />
       <StepIndicator />
 
@@ -739,6 +769,26 @@ const styles = StyleSheet.create({
   resumeVenue: { color: '#475569', fontSize: 11, marginTop: 2 },
   resumeBtn: { backgroundColor: '#22c55e', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 },
   resumeBtnText: { color: '#0f172a', fontWeight: 'bold', fontSize: 14 },
+  scheduleLink: {
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 12,
+    padding: 13,
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  scheduleLinkText: { color: '#38bdf8', fontWeight: 'bold', fontSize: 14 },
+  scheduleBanner: {
+    backgroundColor: '#082f49',
+    borderWidth: 1,
+    borderColor: '#38bdf8',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  scheduleBannerTitle: { color: '#fff', fontWeight: 'bold', fontSize: 14, marginBottom: 3 },
+  scheduleBannerText: { color: '#bae6fd', fontSize: 12 },
 
   weatherBtn: {
     backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#38bdf8',

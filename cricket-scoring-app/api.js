@@ -6,7 +6,7 @@
 // Change this to your deployed backend URL when live
 // For local testing use your PC IP address (not localhost)
 // Find your IP: run "ipconfig" in terminal → IPv4 Address
-const BASE_URL = 'http://192.168.100.102:3000';
+const BASE_URL = 'https://cricket-app-production.up.railway.app';
 
 // ─── Save a match to the server ───────────────────────────
 export const saveMatchToServer = async (match, batsmenStats, bowlerStats) => {

@@ -76,6 +76,7 @@ export default function HomeScreen() {
     // Only auto-show if resuming (not new match) after 1st innings ended
     !setup && resumeData?.match?.inningsEnded && (resumeData?.match?.innings || 1) === 1
   );
+  const [matchResult, setMatchResult] = useState(null);
 
   useEffect(() => {
     if (setup) {
@@ -450,38 +451,53 @@ export default function HomeScreen() {
   };
 
   // ── Check match result in 2nd innings ──
+  // ── Save and show match result ──
+  const showMatchResult = (resultData, updated) => {
+    setMatchResult(resultData);
+    AsyncStorage.setItem('matchResult', JSON.stringify(resultData)).catch(() => {});
+    setFirstInningsScore(prev => ({ ...prev, result: resultData }));
+    setShowInningsModal(true);
+  };
+
   const checkMatchResult = (updated) => {
     if (innings !== 2 || !firstInningsScore) return false;
-    const target = firstInningsScore.runs + 1;
+    const fi = firstInningsScore;
+    const target = fi.runs + 1;
+    const allOut = updated.wickets >= updated.players.length - 1;
+    const oversComplete = updated.balls >= updated.totalOvers * 6;
+    const chasersTeam = updated.battingTeam;
+    const defendersTeam = fi.team || match.bowlingTeam || 'Team A';
+    const motm = getManOfTheMatch(updated.battingTeam, batsmenStats, bowlerStats);
 
+    // ── Chasing team reached target ──
     if (updated.runs >= target) {
-      const motm = getManOfTheMatch(updated.battingTeam, batsmenStats, bowlerStats);
-      const wicketsLeft = (updated.players.length - 1) - updated.wickets;
-      const winnerName = updated.battingTeam;
-      const loserName = firstInningsScore?.team || match.bowlingTeam || 'Team A';
-      const runsChased = updated.runs;
-      const targetRuns = firstInningsScore.runs;
-
-      // Save result to AsyncStorage for scorecard
+      // Use 10 as max wickets if players array has wrong count
+      const maxWickets = Math.max(updated.players.length - 1, 10);
+      const wicketsLeft = maxWickets - updated.wickets;
+      const wicketWord = wicketsLeft === 1 ? '1 wicket' : `${wicketsLeft} wickets`;
       const resultData = {
-        winner: winnerName,
-        loser: loserName,
-        margin: `${wicketsLeft} wickets`,
-        firstTeamScore: `${firstInningsScore.runs}/${firstInningsScore.wickets}`,
-        secondTeamScore: `${updated.runs}/${updated.wickets}`,
+        winner: chasersTeam,
+        loser: defendersTeam,
+        resultType: 'wickets',
+        margin: wicketWord,
+        resultText: `${chasersTeam} won by ${wicketWord}`,
+        firstTeam: defendersTeam,
+        firstScore: `${fi.runs}/${fi.wickets}`,
+        secondTeam: chasersTeam,
+        secondScore: `${updated.runs}/${updated.wickets}`,
+        target,
         motm: motm?.name || '—',
+        motmRuns: motm?.runs || 0,
+        motmWickets: motm?.wickets || 0,
       };
-      AsyncStorage.setItem('matchResult', JSON.stringify(resultData)).catch(() => {});
-
-      // Show result modal
-      setShowInningsModal(true);
-      setFirstInningsScore(prev => ({ ...prev, result: resultData }));
-
+      showMatchResult(resultData, updated);
       Alert.alert(
-        '🏆 ' + winnerName + ' Won!',
-        `${winnerName} beat ${loserName} by ${wicketsLeft} wickets
+        '🏆 ' + chasersTeam + ' Won!',
+        `${chasersTeam} beat ${defendersTeam} by ${resultData.margin}
 ` +
-        `(${runsChased}/${updated.wickets} chasing ${targetRuns})
+        `${chasersTeam}: ${updated.runs}/${updated.wickets}
+` +
+        `${defendersTeam}: ${fi.runs}/${fi.wickets}
 
 ` +
         `🌟 Man of the Match: ${motm?.name || '—'}
@@ -492,23 +508,73 @@ export default function HomeScreen() {
       return true;
     }
 
-    // Check if 2nd innings all out - defending team wins
-    const allOut2 = updated.wickets >= updated.players.length - 1;
-    const oversComplete2 = updated.balls >= updated.totalOvers * 6;
-    if (allOut2 || oversComplete2) {
-      const runsShort = target - 1 - updated.runs;
-      const defenderName = firstInningsScore?.team || match.bowlingTeam || 'Team A';
-      const chaserName = updated.battingTeam;
-      Alert.alert(
-        '🏆 ' + defenderName + ' Won!',
-        `${defenderName} beat ${chaserName} by ${runsShort} runs
+    // ── 2nd innings ended (all out or overs done) ──
+    if (allOut || oversComplete) {
+      const runsShort = fi.runs - updated.runs;
+
+      // ── Tie ──
+      if (updated.runs === fi.runs) {
+        const resultData = {
+          winner: null,
+          resultType: 'tie',
+          resultText: 'Match Tied!',
+          firstTeam: defendersTeam,
+          firstScore: `${fi.runs}/${fi.wickets}`,
+          secondTeam: chasersTeam,
+          secondScore: `${updated.runs}/${updated.wickets}`,
+          target,
+          motm: motm?.name || '—',
+          motmRuns: motm?.runs || 0,
+          motmWickets: motm?.wickets || 0,
+        };
+        showMatchResult(resultData, updated);
+        Alert.alert(
+          '🤝 Match Tied!',
+          `Both teams scored ${fi.runs} runs!
 ` +
-        `(${firstInningsScore?.runs || 0}/${firstInningsScore?.wickets || 0} vs ${updated.runs}/${updated.wickets})
+          `${defendersTeam}: ${fi.runs}/${fi.wickets}
+` +
+          `${chasersTeam}: ${updated.runs}/${updated.wickets}
 
 ` +
-        `Target was ${target} runs`,
+          `🌟 Man of the Match: ${motm?.name || '—'}`,
+          [{ text: 'View Scorecard', onPress: () => router.push('/scorecard') }]
+        );
+        return true;
+      }
+
+      // ── Defending team wins by runs ──
+      const resultData = {
+        winner: defendersTeam,
+        loser: chasersTeam,
+        resultType: 'runs',
+        margin: runsShort === 1 ? '1 run' : `${runsShort} runs`,
+        resultText: `${defendersTeam} won by ${runsShort === 1 ? '1 run' : runsShort + ' runs'}`,
+        firstTeam: defendersTeam,
+        firstScore: `${fi.runs}/${fi.wickets}`,
+        secondTeam: chasersTeam,
+        secondScore: `${updated.runs}/${updated.wickets}`,
+        target,
+        motm: motm?.name || '—',
+        motmRuns: motm?.runs || 0,
+        motmWickets: motm?.wickets || 0,
+      };
+      showMatchResult(resultData, updated);
+      Alert.alert(
+        '🏆 ' + defendersTeam + ' Won!',
+        `${defendersTeam} beat ${chasersTeam} by ${resultData.margin}
+` +
+        `${defendersTeam}: ${fi.runs}/${fi.wickets}
+` +
+        `${chasersTeam}: ${updated.runs}/${updated.wickets}
+
+` +
+        `🌟 Man of the Match: ${motm?.name || '—'}
+` +
+        `${motm?.runs || 0} runs · ${motm?.wickets || 0} wickets`,
         [{ text: 'View Scorecard', onPress: () => router.push('/scorecard') }]
       );
+      return true;
     }
     return false;
   };
@@ -633,29 +699,65 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </>
             )}
-            {innings === 2 && (
-              <>
-                {(() => {
-                  const motm = getManOfTheMatch(match.battingTeam, batsmenStats, bowlerStats);
-                  return motm ? (
-                    <View style={{ backgroundColor: '#0f172a', borderRadius: 12, padding: 12, marginBottom: 16, alignItems: 'center' }}>
-                      <Text style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>🌟 Man of the Match</Text>
-                      <Text style={{ color: '#fff', fontSize: 20, fontWeight: 'bold' }}>{motm.name}</Text>
-                      <Text style={{ color: '#94a3b8', fontSize: 13, marginTop: 4 }}>{motm.runs} runs · {motm.wickets} wickets</Text>
+            {innings === 2 && (() => {
+              const motm = getManOfTheMatch(match.battingTeam, batsmenStats, bowlerStats);
+              const fi = firstInningsScore;
+              const resultData = matchResult;
+              return (
+                <>
+                  {/* Match result banner */}
+                  {resultData && (
+                    <View style={{ backgroundColor: '#0f172a', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                      <Text style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: 18, textAlign: 'center' }}>
+                        {resultData.resultType === 'tie' ? '🤝 Match Tied!' : `🏆 ${resultData.winner} Won!`}
+                      </Text>
+                      {resultData.resultType !== 'tie' && (
+                        <Text style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', marginTop: 4 }}>
+                          by {resultData.margin}
+                        </Text>
+                      )}
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 12 }}>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ color: '#64748b', fontSize: 11 }}>1st Inn</Text>
+                          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>{resultData.firstScore}</Text>
+                          <Text style={{ color: '#94a3b8', fontSize: 11 }}>{resultData.firstTeam}</Text>
+                        </View>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ color: '#64748b', fontSize: 11 }}>2nd Inn</Text>
+                          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>{resultData.secondScore}</Text>
+                          <Text style={{ color: '#94a3b8', fontSize: 11 }}>{resultData.secondTeam}</Text>
+                        </View>
+                      </View>
                     </View>
-                  ) : null;
-                })()}
-                <TouchableOpacity style={styles.btnGreen}
-                  onPress={() => { setShowInningsModal(false); router.push('/scorecard'); }}>
-                  <Text style={styles.btnText}>View Full Scorecard</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.btnGreen, { backgroundColor: '#334155', marginTop: 10 }]}
-                  onPress={() => { setShowInningsModal(false); saveMatch(); router.push('/history'); }}>
-                  <Text style={styles.btnText}>Save & Go to History</Text>
-                </TouchableOpacity>
-              </>
-            )}
+                  )}
+                  {/* Man of the Match */}
+                  {motm && (
+                    <View style={{ backgroundColor: '#1a1a0a', borderRadius: 12, padding: 12, marginBottom: 12, alignItems: 'center', borderWidth: 1, borderColor: '#f59e0b' }}>
+                      <Text style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: 13, marginBottom: 4 }}>🌟 Man of the Match</Text>
+                      <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>{motm.name}</Text>
+                      <Text style={{ color: '#94a3b8', fontSize: 12, marginTop: 4 }}>
+                        {motm.runs > 0 ? `${motm.runs} runs (${motm.balls}b)` : ''}
+                        {motm.runs > 0 && motm.wickets > 0 ? ' · ' : ''}
+                        {motm.wickets > 0 ? `${motm.wickets} wickets` : ''}
+                      </Text>
+                    </View>
+                  )}
+                  <TouchableOpacity style={styles.btnGreen}
+                    onPress={() => { setShowInningsModal(false); router.push('/scorecard'); }}>
+                    <Text style={styles.btnText}>📋 View Full Scorecard</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.btnGreen, { backgroundColor: '#334155', marginTop: 10 }]}
+                    onPress={async () => {
+                      setShowInningsModal(false);
+                      await saveMatch();
+                      router.push('/history');
+                    }}>
+                    <Text style={styles.btnText}>💾 Save & View History</Text>
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
           </View>
         </View>
       </Modal>
@@ -919,39 +1021,37 @@ export default function HomeScreen() {
         ))}
       </View>
 
-      <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
-        <TouchableOpacity style={[styles.btnGreen, { flex: 2 }]} onPress={saveMatch}>
-          <Text style={styles.btnText}>Save Match</Text>
-        </TouchableOpacity>
+      {/* ── Row 1: Save Match ── */}
+      <TouchableOpacity style={[styles.btnGreen, { marginTop: 10 }]} onPress={saveMatch}>
+        <Text style={styles.btnText}>💾 Save Match</Text>
+      </TouchableOpacity>
+
+      {/* ── Row 2: Navigation buttons ── */}
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
         <TouchableOpacity
-          style={[styles.btnGreen, { flex: 1, backgroundColor: '#334155' }]}
+          style={[styles.navBtn, { backgroundColor: '#334155' }]}
           onPress={() => router.push('/history')}>
-          <Text style={styles.btnText}>History</Text>
+          <Text style={styles.navBtnText}>📋 History</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.btnGreen, { flex: 1, backgroundColor: '#1e293b' }]}
+          style={[styles.navBtn, { backgroundColor: '#1e3a5f' }]}
           onPress={() => router.push('/charts')}>
-          <Text style={styles.btnText}>Charts</Text>
+          <Text style={styles.navBtnText}>📊 Charts</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.btnGreen, { flex: 1, backgroundColor: '#0f172a' }]}
+          style={[styles.navBtn, { backgroundColor: '#1a3a2a' }]}
           onPress={() => router.push('/scorecard')}>
-          <Text style={styles.btnText}>Card</Text>
+          <Text style={styles.navBtnText}>📄 Scorecard</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.btnGreen, { flex: 1, backgroundColor: '#1d4ed8' }]}
+          style={[styles.navBtn, { backgroundColor: '#1d4ed8' }]}
           onPress={() => router.push('/players')}>
-          <Text style={styles.btnText}>Players</Text>
+          <Text style={styles.navBtnText}>👤 Players</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.btnGreen, { flex: 1, backgroundColor: '#7c3aed' }]}
-          onPress={() => router.push('/charts')}>
-          <Text style={styles.btnText}>Charts</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.btnGreen, { flex: 1, backgroundColor: '#7c3aed' }]}
-          onPress={() => router.push('/charts')}>
-          <Text style={styles.btnText}>Charts</Text>
+          style={[styles.navBtn, { backgroundColor: '#0f766e' }]}
+          onPress={() => router.push('/schedule')}>
+          <Text style={styles.navBtnText}>📅 Schedule</Text>
         </TouchableOpacity>
       </View>
 
@@ -1012,6 +1112,11 @@ const styles = StyleSheet.create({
     borderRadius: 10, flex: 1, alignItems: 'center'
   },
   btnTwo: { backgroundColor: '#0ea5e9' },
+  navBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  navBtnText: { color: '#fff', fontWeight: '600', fontSize: 11, textAlign: 'center' },
   btnFour: { backgroundColor: '#22c55e' },
   btnSix: { backgroundColor: '#a855f7' },
   btnRed: { backgroundColor: '#ef4444' },

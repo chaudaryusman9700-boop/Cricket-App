@@ -82,7 +82,8 @@ export default function HomeScreen() {
     if (setup) {
       // ── Fresh new match — clear ALL stale data ──
       AsyncStorage.removeItem('firstInnings').catch(() => {});
-      AsyncStorage.removeItem('matchResult').catch(() => {});
+      // Don't remove matchResult here — scorecard needs it
+      // It gets overwritten when next match ends
     } else if (resumeData) {
       // ── Resuming — restore first innings score if 1st innings ended ──
       if (resumeData?.match?.inningsEnded) {
@@ -510,7 +511,7 @@ export default function HomeScreen() {
 
     // ── 2nd innings ended (all out or overs done) ──
     if (allOut || oversComplete) {
-      const runsShort = fi.runs - updated.runs;
+      const runsShort = target - 1 - updated.runs; // runs short of target
 
       // ── Tie ──
       if (updated.runs === fi.runs) {

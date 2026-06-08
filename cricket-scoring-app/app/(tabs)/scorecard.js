@@ -465,12 +465,33 @@ export default function ScorecardScreen() {
       {/* Match Header */}
       <View style={styles.header}>
         {matchResult && (
-          <View style={styles.resultBanner}>
-            <Text style={styles.resultText}>
+          <View style={[styles.resultBanner, {
+            backgroundColor: matchResult.resultType === 'tie' ? '#1a2a3a' : '#1a3a1a',
+            borderWidth: 1.5,
+            borderColor: matchResult.resultType === 'tie' ? '#38bdf8' : '#22c55e',
+          }]}>
+            <Text style={[styles.resultText, { fontSize: 20 }]}>
               {matchResult.resultType === 'tie' ? '🤝 Match Tied!' : `🏆 ${matchResult.winner} Won!`}
             </Text>
             {matchResult.resultType !== 'tie' && (
-              <Text style={styles.resultMargin}>by {matchResult.margin}</Text>
+              <Text style={[styles.resultMargin, { fontSize: 15, color: '#fff', marginTop: 4 }]}>
+                by {matchResult.margin}
+              </Text>
+            )}
+            <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
+              <Text style={{ color: '#64748b', fontSize: 12 }}>
+                {matchResult.firstTeam}: {matchResult.firstScore}
+              </Text>
+              <Text style={{ color: '#64748b', fontSize: 12 }}>
+                {matchResult.secondTeam}: {matchResult.secondScore}
+              </Text>
+            </View>
+            {matchResult.motm && matchResult.motm !== '—' && (
+              <Text style={{ color: '#f59e0b', fontSize: 12, marginTop: 6 }}>
+                🌟 MOTM: {matchResult.motm}
+                {matchResult.motmRuns > 0 ? ` — ${matchResult.motmRuns} runs` : ''}
+                {matchResult.motmWickets > 0 ? ` · ${matchResult.motmWickets} wkts` : ''}
+              </Text>
             )}
           </View>
         )}

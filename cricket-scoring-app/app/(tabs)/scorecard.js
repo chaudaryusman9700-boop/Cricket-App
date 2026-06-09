@@ -6,7 +6,7 @@ import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, Share, Alert, Modal, ActivityIndicator
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 export default function ScorecardScreen() {
   const [matchData, setMatchData] = useState(null);
@@ -14,6 +14,9 @@ export default function ScorecardScreen() {
   const [matchResult, setMatchResult] = useState(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+
+  // Read result passed directly from scoring screen
+  const params = useLocalSearchParams();
 
   useFocusEffect(useCallback(() => { loadData(); }, []));
 
@@ -23,8 +26,20 @@ export default function ScorecardScreen() {
       if (data) setMatchData(JSON.parse(data));
       const fi = await AsyncStorage.getItem('firstInnings');
       if (fi) setFirstInnings(JSON.parse(fi));
-      const result = await AsyncStorage.getItem('matchResult');
-      if (result) setMatchResult(JSON.parse(result));
+
+      // First try params passed from scoring screen (most reliable)
+      if (params?.resultData) {
+        try {
+          const parsed = JSON.parse(params.resultData);
+          setMatchResult(parsed);
+          // Also save to AsyncStorage for next time
+          await AsyncStorage.setItem('matchResult', JSON.stringify(parsed));
+        } catch (e) { console.log('params parse error:', e); }
+      } else {
+        // Fallback: read from AsyncStorage
+        const result = await AsyncStorage.getItem('matchResult');
+        if (result) setMatchResult(JSON.parse(result));
+      }
     } catch (e) { console.log(e); }
   };
 
@@ -125,19 +140,59 @@ export default function ScorecardScreen() {
   const fow1 = fi ? buildFOW(fiHistory) : [];
   const motm = getMotm();
 
+  // ── Compute result from scores if matchResult not in state ──
+  const getComputedResult = () => {
+    if (matchResult?.resultText) return matchResult;
+    if (!fi) return null;
+    const target = fi.runs + 1;
+    if (match.runs >= target) {
+      const wicketsLeft = 10 - match.wickets;
+      const margin = `${wicketsLeft} wicket${wicketsLeft !== 1 ? 's' : ''}`;
+      return { winner: match.battingTeam, loser: fi.team, margin, resultType: 'wickets',
+        resultText: `${match.battingTeam} won by ${margin}`,
+        firstTeam: fi.team, firstScore: `${fi.runs}/${fi.wickets}`,
+        secondTeam: match.battingTeam, secondScore: `${match.runs}/${match.wickets}` };
+    } else if (match.runs === fi.runs) {
+      return { resultType: 'tie', resultText: 'Match Tied!',
+        firstTeam: fi.team, firstScore: `${fi.runs}/${fi.wickets}`,
+        secondTeam: match.battingTeam, secondScore: `${match.runs}/${match.wickets}` };
+    } else {
+      const runsShort = target - 1 - match.runs;
+      const margin = `${runsShort} run${runsShort !== 1 ? 's' : ''}`;
+      return { winner: fi.team, loser: match.battingTeam, margin, resultType: 'runs',
+        resultText: `${fi.team} won by ${margin}`,
+        firstTeam: fi.team, firstScore: `${fi.runs}/${fi.wickets}`,
+        secondTeam: match.battingTeam, secondScore: `${match.runs}/${match.wickets}` };
+    }
+  };
+  const computedResult = getComputedResult();
+
   // ── SHORT SUMMARY SHARE ──
   const shareShortSummary = async () => {
     const line = '━'.repeat(28);
     const result = matchResult;
     let text = `🏏 *CRICKET MATCH RESULT*\n${line}\n`;
 
-    if (result) {
-      if (result.resultType === 'tie') {
-        text += `🤝 *MATCH TIED!*\n`;
+    // ── Calculate result if not in state ──
+    let resultLine = '';
+    if (result && result.resultText) {
+      resultLine = result.resultText;
+    } else if (fi) {
+      // Calculate manually from scores
+      const target = fi.runs + 1;
+      if (match.runs >= target) {
+        const wicketsLeft = 10 - match.wickets;
+        resultLine = `${match.battingTeam} won by ${wicketsLeft} wicket${wicketsLeft !== 1 ? 's' : ''}`;
+      } else if (match.runs === fi.runs) {
+        resultLine = 'Match Tied!';
       } else {
-        text += `🏆 *${result.winner} WON!*\n`;
-        text += `by ${result.margin}\n`;
+        const runsShort = target - 1 - match.runs;
+        resultLine = `${fi.team} won by ${runsShort} run${runsShort !== 1 ? 's' : ''}`;
       }
+    }
+
+    if (resultLine) {
+      text += `\n🏆 *${resultLine}*\n`;
       text += `${line}\n`;
     }
 
@@ -464,29 +519,29 @@ export default function ScorecardScreen() {
 
       {/* Match Header */}
       <View style={styles.header}>
-        {matchResult && (
+        {computedResult && (
           <View style={[styles.resultBanner, {
-            backgroundColor: matchResult.resultType === 'tie' ? '#1a2a3a' : '#1a3a1a',
+            backgroundColor: computedResult.resultType === 'tie' ? '#1a2a3a' : '#1a3a1a',
             borderWidth: 1.5,
-            borderColor: matchResult.resultType === 'tie' ? '#38bdf8' : '#22c55e',
+            borderColor: computedResult.resultType === 'tie' ? '#38bdf8' : '#22c55e',
           }]}>
             <Text style={[styles.resultText, { fontSize: 20 }]}>
-              {matchResult.resultType === 'tie' ? '🤝 Match Tied!' : `🏆 ${matchResult.winner} Won!`}
+              {computedResult.resultType === 'tie' ? '🤝 Match Tied!' : `🏆 ${computedResult.winner} Won!`}
             </Text>
-            {matchResult.resultType !== 'tie' && (
+            {computedResult.resultType !== 'tie' && (
               <Text style={[styles.resultMargin, { fontSize: 15, color: '#fff', marginTop: 4 }]}>
-                by {matchResult.margin}
+                by {computedResult.margin}
               </Text>
             )}
             <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
               <Text style={{ color: '#64748b', fontSize: 12 }}>
-                {matchResult.firstTeam}: {matchResult.firstScore}
+                {computedResult.firstTeam}: {computedResult.firstScore}
               </Text>
               <Text style={{ color: '#64748b', fontSize: 12 }}>
-                {matchResult.secondTeam}: {matchResult.secondScore}
+                {computedResult.secondTeam}: {computedResult.secondScore}
               </Text>
             </View>
-            {matchResult.motm && matchResult.motm !== '—' && (
+            {computedResult.motm && computedResult.motm !== '—' && (
               <Text style={{ color: '#f59e0b', fontSize: 12, marginTop: 6 }}>
                 🌟 MOTM: {matchResult.motm}
                 {matchResult.motmRuns > 0 ? ` — ${matchResult.motmRuns} runs` : ''}

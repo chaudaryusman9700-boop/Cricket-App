@@ -504,7 +504,10 @@ export default function HomeScreen() {
         `🌟 Man of the Match: ${motm?.name || '—'}
 ` +
         `${motm?.runs || 0} runs · ${motm?.wickets || 0} wickets`,
-        [{ text: 'View Scorecard', onPress: () => router.push('/scorecard') }]
+        [{ text: 'View Scorecard', onPress: () => router.push({
+          pathname: '/scorecard',
+          params: { resultData: JSON.stringify(resultData) }
+        }) }]
       );
       return true;
     }
@@ -539,7 +542,10 @@ export default function HomeScreen() {
 
 ` +
           `🌟 Man of the Match: ${motm?.name || '—'}`,
-          [{ text: 'View Scorecard', onPress: () => router.push('/scorecard') }]
+          [{ text: 'View Scorecard', onPress: () => router.push({
+            pathname: '/scorecard',
+            params: { resultData: JSON.stringify(resultData) }
+          }) }]
         );
         return true;
       }
@@ -573,7 +579,10 @@ export default function HomeScreen() {
         `🌟 Man of the Match: ${motm?.name || '—'}
 ` +
         `${motm?.runs || 0} runs · ${motm?.wickets || 0} wickets`,
-        [{ text: 'View Scorecard', onPress: () => router.push('/scorecard') }]
+        [{ text: 'View Scorecard', onPress: () => router.push({
+          pathname: '/scorecard',
+          params: { resultData: JSON.stringify(resultData) }
+        }) }]
       );
       return true;
     }

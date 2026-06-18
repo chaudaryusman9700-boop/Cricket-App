@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const matchRoutes = require('./routes/matches');
 const playerRoutes = require('./routes/players');
+const coachingRoutes = require('./routes/coaching');
 
 require('./models/db');
 
@@ -13,6 +14,7 @@ app.use(express.json());
 
 app.use('/api/matches', matchRoutes);
 app.use('/api/players', playerRoutes);
+app.use('/api/coaching', coachingRoutes);
 
 app.get('/', (req, res) => {
   res.json({

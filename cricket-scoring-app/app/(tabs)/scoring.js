@@ -1063,6 +1063,11 @@ export default function HomeScreen() {
           onPress={() => router.push('/schedule')}>
           <Text style={styles.navBtnText}>📅 Schedule</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.navBtn, { backgroundColor: '#7c3aed' }]}
+          onPress={() => router.push('/coaching')}>
+          <Text style={styles.navBtnText}>🧠 AI Coach</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={{ height: 40 }} />

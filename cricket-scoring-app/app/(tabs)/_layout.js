@@ -41,6 +41,10 @@ export default function RootLayout() {
         name="matchday"
         options={{ title: 'Match Day' }}
       />
+      <Stack.Screen
+        name="coaching"
+        options={{ title: 'AI Coach' }}
+      />
     </Stack>
   );
 }

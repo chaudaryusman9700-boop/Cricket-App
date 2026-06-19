@@ -89,3 +89,25 @@ export const fetchPlayerStats = async (name) => {
     return { success: false, player: null };
   }
 };
+
+const requestCoachingTip = async (endpoint, payload) => {
+  try {
+    const response = await fetch(`${BASE_URL}/api/coaching/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Server error');
+    return { success: true, data };
+  } catch (err) {
+    console.error(`requestCoachingTip/${endpoint}:`, err.message);
+    return { success: false, error: err.message };
+  }
+};
+
+export const fetchBattingCoach = (payload) => requestCoachingTip('batting', payload);
+
+export const fetchBowlingCoach = (payload) => requestCoachingTip('bowling', payload);
+
+export const fetchFullCoach = (payload) => requestCoachingTip('full', payload);

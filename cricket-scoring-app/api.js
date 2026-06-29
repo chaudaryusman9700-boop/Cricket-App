@@ -3,9 +3,7 @@
 // Import and use this in scoring.js and history.js
 // ─────────────────────────────────────────────────────────
 
-// Change this to your deployed backend URL when live
-// For local testing use your PC IP address (not localhost)
-// Find your IP: run "ipconfig" in terminal → IPv4 Address
+// ── Production URL (Railway) — works from anywhere, no PC needed ──
 const BASE_URL = 'https://cricket-app-production.up.railway.app';
 
 // ─── Save a match to the server ───────────────────────────
@@ -90,24 +88,53 @@ export const fetchPlayerStats = async (name) => {
   }
 };
 
-const requestCoachingTip = async (endpoint, payload) => {
+// ─── AI Coach: batting tips (ML model) ───────────────────
+export const getBattingTips = async (payload) => {
   try {
-    const response = await fetch(`${BASE_URL}/api/coaching/${endpoint}`, {
+    const response = await fetch(`${BASE_URL}/api/coaching/batting`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Server error');
-    return { success: true, data };
+    if (!response.ok) throw new Error(data.error || 'AI service error');
+    return { success: true, ...data };
   } catch (err) {
-    console.error(`requestCoachingTip/${endpoint}:`, err.message);
+    console.error('getBattingTips:', err.message);
     return { success: false, error: err.message };
   }
 };
 
-export const fetchBattingCoach = (payload) => requestCoachingTip('batting', payload);
+// ─── AI Coach: bowling tips (ML model) ───────────────────
+export const getBowlingTips = async (payload) => {
+  try {
+    const response = await fetch(`${BASE_URL}/api/coaching/bowling`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'AI service error');
+    return { success: true, ...data };
+  } catch (err) {
+    console.error('getBowlingTips:', err.message);
+    return { success: false, error: err.message };
+  }
+};
 
-export const fetchBowlingCoach = (payload) => requestCoachingTip('bowling', payload);
-
-export const fetchFullCoach = (payload) => requestCoachingTip('full', payload);
+// ─── AI Coach: full coaching (batting + bowling in one call) ───
+export const getFullCoaching = async (battingPayload, bowlingPayload) => {
+  try {
+    const response = await fetch(`${BASE_URL}/api/coaching/full`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batting: battingPayload, bowling: bowlingPayload }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'AI service error');
+    return { success: true, ...data };
+  } catch (err) {
+    console.error('getFullCoaching:', err.message);
+    return { success: false, error: err.message };
+  }
+};

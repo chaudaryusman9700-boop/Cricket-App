@@ -1,10 +1,10 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, Alert, Platform,
-  KeyboardAvoidingView,
+  StyleSheet, Alert, Platform,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { Picker } from '@react-native-picker/picker';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -23,18 +23,10 @@ const DEFAULT_SETUP = {
 };
 
 // ── Replace with your actual API key from openweathermap.org ──
-const WEATHER_API_KEY = '2044c6ee71414f0d858bd4bcbd55e041';
+const WEATHER_API_KEY = 'YOUR_API_KEY_HERE';
 
 export default function SetupScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const scheduledMatch = (() => {
-    try {
-      return params?.scheduledMatch ? JSON.parse(params.scheduledMatch) : null;
-    } catch {
-      return null;
-    }
-  })();
   const [step, setStep] = useState(1);
   const [resumeMatch, setResumeMatch] = useState(null);
   const [showResume, setShowResume] = useState(false);
@@ -93,17 +85,7 @@ export default function SetupScreen() {
       ]
     );
   };
-  const [setup, setSetup] = useState(() => {
-    if (!scheduledMatch) return DEFAULT_SETUP;
-    return {
-      ...DEFAULT_SETUP,
-      teamAName: scheduledMatch.teamAName || DEFAULT_SETUP.teamAName,
-      teamBName: scheduledMatch.teamBName || DEFAULT_SETUP.teamBName,
-      venue: scheduledMatch.venue || '',
-      matchDate: scheduledMatch.matchDate || DEFAULT_SETUP.matchDate,
-      matchTime: scheduledMatch.matchTime || DEFAULT_SETUP.matchTime,
-    };
-  });
+  const [setup, setSetup] = useState(DEFAULT_SETUP);
   const [newPlayerA, setNewPlayerA] = useState('');
   const [newPlayerB, setNewPlayerB] = useState('');
   const [weather, setWeather] = useState(null);
@@ -333,26 +315,24 @@ export default function SetupScreen() {
 
   // ── STEP 1: Teams & Players ──
   if (step === 1) return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: '#0f172a' }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      enabled={Platform.OS === 'ios'}
+    <KeyboardAwareScrollView
+      style={styles.container}
+      keyboardShouldPersistTaps="handled"
+      enableOnAndroid={true}
+      extraScrollHeight={120}
+      enableAutomaticScroll={true}
     >
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       <Text style={styles.title}>Match Setup</Text>
-      {scheduledMatch ? (
-        <View style={styles.scheduleBanner}>
-          <Text style={styles.scheduleBannerTitle}>Scheduled match loaded</Text>
-          <Text style={styles.scheduleBannerText}>
-            {scheduledMatch.teamAName} vs {scheduledMatch.teamBName} · {scheduledMatch.matchDate} {scheduledMatch.matchTime}
-          </Text>
-        </View>
-      ) : (
-        <TouchableOpacity style={styles.scheduleLink} onPress={() => router.push('/schedule')}>
-          <Text style={styles.scheduleLinkText}>Schedule an upcoming match</Text>
-        </TouchableOpacity>
-      )}
       <ResumeCard />
+
+      {/* ── Schedule button ── */}
+      <TouchableOpacity
+        style={styles.scheduleBtn}
+        onPress={() => router.push('/schedule')}
+      >
+        <Text style={styles.scheduleBtnText}>📅 Schedule an upcoming match</Text>
+      </TouchableOpacity>
+
       <StepIndicator />
 
       {/* Team A */}
@@ -456,18 +436,18 @@ export default function SetupScreen() {
         <Text style={styles.btnPrimaryText}>Next: Match Details →</Text>
       </TouchableOpacity>
       <View style={{ height: 40 }} />
-    </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 
   // ── STEP 2: Match Details ──
   if (step === 2) return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: '#0f172a' }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      enabled={Platform.OS === 'ios'}
+    <KeyboardAwareScrollView
+      style={styles.container}
+      keyboardShouldPersistTaps="handled"
+      enableOnAndroid={true}
+      extraScrollHeight={120}
+      enableAutomaticScroll={true}
     >
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       <Text style={styles.title}>Match Setup</Text>
       <StepIndicator />
 
@@ -615,8 +595,7 @@ export default function SetupScreen() {
         </TouchableOpacity>
       </View>
       <View style={{ height: 40 }} />
-    </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 
   // ── STEP 3: Review ──
@@ -626,12 +605,13 @@ export default function SetupScreen() {
   const bowlingTeam = battingTeam === setup.teamAName ? setup.teamBName : setup.teamAName;
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: '#0f172a' }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      enabled={Platform.OS === 'ios'}
+    <KeyboardAwareScrollView
+      style={styles.container}
+      keyboardShouldPersistTaps="handled"
+      enableOnAndroid={true}
+      extraScrollHeight={120}
+      enableAutomaticScroll={true}
     >
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       <Text style={styles.title}>Match Setup</Text>
       <StepIndicator />
 
@@ -687,13 +667,26 @@ export default function SetupScreen() {
         </TouchableOpacity>
       </View>
       <View style={{ height: 40 }} />
-    </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a', padding: 16 },
+  scheduleBtn: {
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#38bdf8',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  scheduleBtnText: {
+    color: '#38bdf8',
+    fontWeight: '600',
+    fontSize: 14,
+  },
   title: { fontSize: 26, color: '#fff', fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
 
   stepRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, position: 'relative' },
@@ -769,26 +762,6 @@ const styles = StyleSheet.create({
   resumeVenue: { color: '#475569', fontSize: 11, marginTop: 2 },
   resumeBtn: { backgroundColor: '#22c55e', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 },
   resumeBtnText: { color: '#0f172a', fontWeight: 'bold', fontSize: 14 },
-  scheduleLink: {
-    backgroundColor: '#111827',
-    borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 12,
-    padding: 13,
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  scheduleLinkText: { color: '#38bdf8', fontWeight: 'bold', fontSize: 14 },
-  scheduleBanner: {
-    backgroundColor: '#082f49',
-    borderWidth: 1,
-    borderColor: '#38bdf8',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
-  },
-  scheduleBannerTitle: { color: '#fff', fontWeight: 'bold', fontSize: 14, marginBottom: 3 },
-  scheduleBannerText: { color: '#bae6fd', fontSize: 12 },
 
   weatherBtn: {
     backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#38bdf8',

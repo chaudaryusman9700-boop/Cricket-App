@@ -3,8 +3,8 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, Alert, Modal, RefreshControl, Platform,
-  KeyboardAvoidingView,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 
@@ -106,9 +106,11 @@ export default function ScheduleScreen() {
   const [matchTime, setMatchTime] = useState('');
   const [venue, setVenue] = useState('');
   const [overs, setOvers] = useState('10');
-  const [players, setPlayers] = useState([]);
+  const [teamAPlayers, setTeamAPlayers] = useState([]);
+  const [teamBPlayers, setTeamBPlayers] = useState([]);
+  const [newPlayerA, setNewPlayerA] = useState('');
+  const [newPlayerB, setNewPlayerB] = useState('');
   const [newPlayer, setNewPlayer] = useState('');
-  const [detailNewPlayer, setDetailNewPlayer] = useState('');
   const [formWeather, setFormWeather] = useState(null);
 
   useFocusEffect(
@@ -259,12 +261,17 @@ export default function ScheduleScreen() {
   };
 
   // ── Add player ──
-  const addPlayer = () => {
-    const name = newPlayer.trim();
+  const addPlayerToTeam = (team) => {
+    const name = (team === 'A' ? newPlayerA : newPlayerB).trim();
     if (!name) return;
-    if (players.includes(name)) { Alert.alert('Duplicate', `${name} already added.`); return; }
-    setPlayers(prev => [...prev, name]);
-    setNewPlayer('');
+    const teamList = team === 'A' ? teamAPlayers : teamBPlayers;
+    const setTeam = team === 'A' ? setTeamAPlayers : setTeamBPlayers;
+    const setNewP = team === 'A' ? setNewPlayerA : setNewPlayerB;
+    if (teamList.includes(name)) {
+      Alert.alert('Duplicate', `${name} already in Team ${team}.`); return;
+    }
+    setTeam(prev => [...prev, name]);
+    setNewP('');
   };
 
   // ── Save scheduled match ──
@@ -281,7 +288,9 @@ export default function ScheduleScreen() {
       date: matchDate.trim(),
       time: matchTime.trim(),
       overs: overs,
-      players: players,
+      players: [...teamAPlayers, ...teamBPlayers],
+      teamAPlayers,
+      teamBPlayers,
       attendance: {},
       weather: formWeather,
       createdAt: Date.now(),
@@ -295,7 +304,8 @@ export default function ScheduleScreen() {
     await saveMatches(updated);
     setShowAddModal(false);
     setTeamA(''); setTeamB(''); setMatchDate(''); setMatchTime('');
-    setVenue(''); setOvers('10'); setPlayers([]);
+    setVenue(''); setOvers('10'); setTeamAPlayers([]); setTeamBPlayers([]);
+    setNewPlayerA(''); setNewPlayerB('');
     setFormWeather(null);
     Alert.alert(
       'Scheduled ✅',
@@ -338,47 +348,6 @@ export default function ScheduleScreen() {
   };
 
   // ── Start match from schedule ──
-  const addPlayerToScheduledMatch = async (matchId) => {
-    const name = detailNewPlayer.trim();
-    if (!name) return;
-
-    const match = matches.find(m => m.id === matchId);
-    if (!match) return;
-    if (match.players.some(p => p.toLowerCase() === name.toLowerCase())) {
-      Alert.alert('Duplicate', `${name} already added.`);
-      return;
-    }
-
-    const updated = matches.map(m => {
-      if (m.id !== matchId) return m;
-      return {
-        ...m,
-        players: [...m.players, name],
-        attendance: { ...m.attendance, [name]: true },
-      };
-    });
-
-    await saveMatches(updated);
-    setShowDetailModal(updated.find(m => m.id === matchId));
-    setDetailNewPlayer('');
-  };
-
-  const removePlayerFromScheduledMatch = async (matchId, player) => {
-    const updated = matches.map(m => {
-      if (m.id !== matchId) return m;
-      const attendance = { ...m.attendance };
-      delete attendance[player];
-      return {
-        ...m,
-        players: m.players.filter(p => p !== player),
-        attendance,
-      };
-    });
-
-    await saveMatches(updated);
-    setShowDetailModal(updated.find(m => m.id === matchId));
-  };
-
   const startFromSchedule = (m) => {
     const absentPlayers = m.players.filter(p => m.attendance[p] === false);
     const doStart = () => {
@@ -431,7 +400,12 @@ export default function ScheduleScreen() {
       <Modal visible transparent animationType="slide">
         <View style={styles.overlay}>
           <View style={styles.sheet}>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <KeyboardAwareScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              enableOnAndroid={true}
+              extraScrollHeight={100}
+            >
 
               {/* Header */}
               <View style={styles.detailHeader}>
@@ -482,64 +456,7 @@ export default function ScheduleScreen() {
               </View>
 
               {/* Attendance */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                  Players - {presentCount}/{m.players.length} present
-                </Text>
-                <View style={styles.addRow}>
-                  <TextInput
-                    style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                    value={detailNewPlayer}
-                    onChangeText={setDetailNewPlayer}
-                    placeholder="Add player"
-                    placeholderTextColor="#475569"
-                    onSubmitEditing={() => addPlayerToScheduledMatch(m.id)}
-                    blurOnSubmit={false}
-                    returnKeyType="done"
-                  />
-                  <TouchableOpacity style={styles.addBtn} onPress={() => addPlayerToScheduledMatch(m.id)}>
-                    <Text style={styles.addBtnText}>+ Add</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {absentCount > 0 && (
-                  <View style={[styles.absentAlert, { marginTop: 10 }]}>
-                    <Text style={styles.absentAlertText}>{absentCount} player{absentCount > 1 ? 's' : ''} marked absent</Text>
-                  </View>
-                )}
-
-                {m.players.length === 0 && (
-                  <Text style={styles.noData}>No players added yet.</Text>
-                )}
-
-                {m.players.map((p, i) => {
-                  const status = m.attendance[p];
-                  const isPresent = status !== false;
-                  const isMarked = status !== undefined;
-                  return (
-                    <View key={i} style={styles.playerEditRow}>
-                      <TouchableOpacity style={styles.attendanceToggle}
-                        onPress={() => toggleAttendance(m.id, p)}>
-                        <View style={[styles.attDot, {
-                          backgroundColor: !isMarked ? '#475569' : isPresent ? '#22c55e' : '#ef4444'
-                        }]} />
-                        <Text style={[styles.playerName, !isPresent && { color: '#64748b' }]}>{p}</Text>
-                        <Text style={[styles.attStatus, {
-                          color: !isMarked ? '#475569' : isPresent ? '#22c55e' : '#ef4444'
-                        }]}>
-                          {!isMarked ? 'Tap to mark' : isPresent ? 'Present' : 'Absent'}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.removePlayerBtn}
-                        onPress={() => removePlayerFromScheduledMatch(m.id, p)}>
-                        <Text style={styles.removePlayerText}>X</Text>
-                      </TouchableOpacity>
-                    </View>
-                  );
-                })}
-              </View>
-
-              {false && m.players.length > 0 && (
+              {m.players.length > 0 && (
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>
                     👥 Attendance — {presentCount}/{m.players.length} present
@@ -578,11 +495,11 @@ export default function ScheduleScreen() {
               <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteMatch(m)}>
                 <Text style={styles.deleteBtnText}>🗑 Delete Match</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.closeBtn} onPress={() => { setShowDetailModal(null); setDetailNewPlayer(''); }}>
+              <TouchableOpacity style={styles.closeBtn} onPress={() => setShowDetailModal(null)}>
                 <Text style={styles.closeBtnText}>Close</Text>
               </TouchableOpacity>
 
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </View>
         </View>
       </Modal>
@@ -594,10 +511,15 @@ export default function ScheduleScreen() {
   // ────────────────────────────────────────────────────────────────
   const renderAddModal = () => (
     <Modal visible={showAddModal} transparent animationType="slide">
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.overlay}>
+      <View style={styles.overlay}>
           <View style={[styles.sheet, { maxHeight: '95%' }]}>
-            <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="none" showsVerticalScrollIndicator={false}>
+            <KeyboardAwareScrollView
+              keyboardShouldPersistTaps="handled"
+              enableOnAndroid={true}
+              extraScrollHeight={150}
+              enableAutomaticScroll={true}
+              showsVerticalScrollIndicator={false}
+            >
               <Text style={styles.sheetTitle}>📅 Schedule New Match</Text>
 
               <Text style={styles.label}>Team A</Text>
@@ -662,23 +584,54 @@ export default function ScheduleScreen() {
                 </View>
               )}
 
-              {/* Players */}
-              <Text style={styles.label}>Players ({players.length})</Text>
+              {/* ── Team A Players ── */}
+              <Text style={[styles.label, { color: '#38bdf8' }]}>
+                🏏 {teamA || 'Team A'} Players ({teamAPlayers.length})
+              </Text>
               <View style={styles.addRow}>
                 <TextInput
                   style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                  value={newPlayer} onChangeText={setNewPlayer}
-                  placeholder="Player name" placeholderTextColor="#475569"
-                  onSubmitEditing={addPlayer} blurOnSubmit={false} returnKeyType="done" />
-                <TouchableOpacity style={styles.addBtn} onPress={addPlayer}>
+                  value={newPlayerA} onChangeText={setNewPlayerA}
+                  placeholder={`Add ${teamA || 'Team A'} player`}
+                  placeholderTextColor="#475569"
+                  onSubmitEditing={() => addPlayerToTeam('A')}
+                  blurOnSubmit={false} returnKeyType="done" />
+                <TouchableOpacity style={styles.addBtn} onPress={() => addPlayerToTeam('A')}>
                   <Text style={styles.addBtnText}>+ Add</Text>
                 </TouchableOpacity>
               </View>
-              {players.map((p, i) => (
+              {teamAPlayers.map((p, i) => (
                 <View key={i} style={styles.playerRow}>
                   <View style={[styles.attDot, { backgroundColor: '#38bdf8' }]} />
                   <Text style={styles.playerName}>{p}</Text>
-                  <TouchableOpacity onPress={() => setPlayers(prev => prev.filter(x => x !== p))}>
+                  <TouchableOpacity onPress={() => setTeamAPlayers(prev => prev.filter(x => x !== p))}>
+                    <Text style={{ color: '#ef4444', fontSize: 16, paddingHorizontal: 8 }}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              {/* ── Team B Players ── */}
+              <Text style={[styles.label, { color: '#22c55e', marginTop: 12 }]}>
+                🏏 {teamB || 'Team B'} Players ({teamBPlayers.length})
+              </Text>
+              <View style={styles.addRow}>
+                <TextInput
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  value={newPlayerB} onChangeText={setNewPlayerB}
+                  placeholder={`Add ${teamB || 'Team B'} player`}
+                  placeholderTextColor="#475569"
+                  onSubmitEditing={() => addPlayerToTeam('B')}
+                  blurOnSubmit={false} returnKeyType="done" />
+                <TouchableOpacity style={[styles.addBtn, { backgroundColor: '#22c55e' }]}
+                  onPress={() => addPlayerToTeam('B')}>
+                  <Text style={styles.addBtnText}>+ Add</Text>
+                </TouchableOpacity>
+              </View>
+              {teamBPlayers.map((p, i) => (
+                <View key={i} style={styles.playerRow}>
+                  <View style={[styles.attDot, { backgroundColor: '#22c55e' }]} />
+                  <Text style={styles.playerName}>{p}</Text>
+                  <TouchableOpacity onPress={() => setTeamBPlayers(prev => prev.filter(x => x !== p))}>
                     <Text style={{ color: '#ef4444', fontSize: 16, paddingHorizontal: 8 }}>✕</Text>
                   </TouchableOpacity>
                 </View>
@@ -689,7 +642,8 @@ export default function ScheduleScreen() {
                   onPress={() => {
                     setShowAddModal(false);
                     setTeamA(''); setTeamB(''); setMatchDate(''); setMatchTime('');
-                    setVenue(''); setOvers('10'); setPlayers([]);
+                    setVenue(''); setOvers('10'); setTeamAPlayers([]); setTeamBPlayers([]);
+                    setNewPlayerA(''); setNewPlayerB('');
                     setFormWeather(null);
                   }}>
                   <Text style={styles.closeBtnText}>Cancel</Text>
@@ -699,10 +653,9 @@ export default function ScheduleScreen() {
                 </TouchableOpacity>
               </View>
               <View style={{ height: 20 }} />
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </View>
         </View>
-      </KeyboardAvoidingView>
     </Modal>
   );
 
@@ -734,7 +687,7 @@ export default function ScheduleScreen() {
           <View style={styles.empty}>
             <Text style={{ fontSize: 48, marginBottom: 16 }}>📅</Text>
             <Text style={styles.emptyTitle}>No matches scheduled</Text>
-            <Text style={styles.emptySub}>Tap &quot;+ New Match&quot; to schedule upcoming matches</Text>
+            <Text style={styles.emptySub}>Tap "+ New Match" to schedule upcoming matches</Text>
             <TouchableOpacity style={[styles.startBtn, { marginTop: 24, paddingHorizontal: 32 }]}
               onPress={() => setShowAddModal(true)}>
               <Text style={styles.startBtnText}>Schedule First Match</Text>
@@ -841,10 +794,6 @@ const styles = StyleSheet.create({
   absentAlert: { backgroundColor: '#7f1d1d', borderRadius: 8, padding: 8, marginBottom: 8 },
   absentAlertText: { color: '#fca5a5', fontSize: 12 },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: '#334155' },
-  playerEditRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderBottomWidth: 0.5, borderBottomColor: '#334155' },
-  attendanceToggle: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
-  removePlayerBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: '#7f1d1d', alignItems: 'center', justifyContent: 'center' },
-  removePlayerText: { color: '#fca5a5', fontSize: 14, fontWeight: 'bold' },
   attDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
   playerName: { flex: 1, color: '#e2e8f0', fontSize: 14 },
   attStatus: { fontSize: 12, fontWeight: '600' },

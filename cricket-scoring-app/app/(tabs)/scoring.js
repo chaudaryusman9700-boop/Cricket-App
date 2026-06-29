@@ -247,9 +247,14 @@ export default function HomeScreen() {
     }
 
     else if (type === 'wideRun') {
-      updated.runs += (1 + run);
-      newBowlerStats[updated.bowler].runs += (1 + run);
-      ballEvent.text = `Wide + ${run} = ${1 + run}`;
+      const wideTotal = 1 + run;
+      updated.runs += wideTotal;
+      updated.extras = (updated.extras || 0) + wideTotal;
+      newBowlerStats[updated.bowler].runs += wideTotal;
+      ballEvent.text = run === 0 ? 'Wide' : `Wide +${run} (${wideTotal})`;
+      // swap striker if odd runs scored
+      if (run % 2 !== 0)
+        [updated.striker, updated.nonStriker] = [updated.nonStriker, updated.striker];
     }
 
     else if (type === 'wideBoundary') {
@@ -273,16 +278,12 @@ export default function HomeScreen() {
 
     else if (type === 'bye') {
       updated.runs += run;
+      updated.extras = (updated.extras || 0) + run;
       updated.balls += 1;
       ballEvent.text = `Bye ${run}`;
+      // swap striker on odd runs
       if (run % 2 !== 0)
         [updated.striker, updated.nonStriker] = [updated.nonStriker, updated.striker];
-    }
-
-    else if (type === 'byeBoundary') {
-      updated.runs += 4;
-      updated.balls += 1;
-      ballEvent.text = 'Bye 4';
     }
 
     updated.snapshots = [...(match.snapshots || []), snapshot];
@@ -982,28 +983,38 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* ── Wide buttons ── */}
+      <View style={styles.sectionLabel}>
+        <Text style={styles.sectionLabelText}>Wides</Text>
+      </View>
       <View style={styles.row}>
-        <TouchableOpacity style={styles.btnSmall} onPress={() => addBall('wide')}>
-          <Text style={styles.btnText}>Wide</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.btnSmall} onPress={() => addBall('wideRun', 2)}>
-          <Text style={styles.btnText}>Wide+2</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.btnSmall} onPress={() => addBall('wideBoundary')}>
-          <Text style={styles.btnText}>Wide 4</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.btnSmall} onPress={() => addBall('noBall')}>
-          <Text style={styles.btnText}>No Ball</Text>
-        </TouchableOpacity>
+        {[0, 1, 2, 3, 4].map(r => (
+          <TouchableOpacity
+            key={r}
+            style={[styles.btnSmall, { backgroundColor: '#b45309' }]}
+            onPress={() => r === 0 ? addBall('wide') : addBall('wideRun', r)}>
+            <Text style={styles.btnText}>{r === 0 ? 'Wd' : `Wd+${r}`}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
+      {/* ── No Ball + Bye buttons ── */}
+      <View style={styles.sectionLabel}>
+        <Text style={styles.sectionLabelText}>Extras</Text>
+      </View>
       <View style={styles.row}>
-        <TouchableOpacity style={styles.btnSmall} onPress={() => addBall('bye', 1)}>
-          <Text style={styles.btnText}>Bye 1</Text>
+        <TouchableOpacity style={[styles.btnSmall, { backgroundColor: '#7c3aed' }]}
+          onPress={() => addBall('noBall')}>
+          <Text style={styles.btnText}>No Ball</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.btnSmall} onPress={() => addBall('bye', 4)}>
-          <Text style={styles.btnText}>Bye 4</Text>
-        </TouchableOpacity>
+        {[1, 2, 3, 4].map(r => (
+          <TouchableOpacity
+            key={r}
+            style={[styles.btnSmall, { backgroundColor: '#0f766e' }]}
+            onPress={() => addBall('bye', r)}>
+            <Text style={styles.btnText}>Bye {r}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {/* ── OVER-BY-OVER LOG ── */}
@@ -1122,6 +1133,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#38bdf8', paddingVertical: 14, paddingHorizontal: 8,
     borderRadius: 10, flex: 1, alignItems: 'center'
   },
+  sectionLabel: { paddingHorizontal: 4, marginTop: 6, marginBottom: 2 },
+  sectionLabelText: { color: '#64748b', fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
   btnSmall: {
     backgroundColor: '#334155', paddingVertical: 12, paddingHorizontal: 6,
     borderRadius: 10, flex: 1, alignItems: 'center'

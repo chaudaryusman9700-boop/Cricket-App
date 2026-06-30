@@ -135,19 +135,31 @@ export default function HomeScreen() {
   };
 
   // ─── ADD PLAYER ─────────────────────────────────────────────────
-  const addPlayer = () => {
+  const addPlayer = (team = 'batting') => {
     const name = newPlayer.trim();
     if (!name) return;
-    if (match.players.includes(name)) {
-      Alert.alert('Duplicate', `${name} is already in the squad.`);
-      return;
-    }
-    Alert.alert('Add Player', `Add "${name}" to the squad?`, [
+    const teamLabel = team === 'batting' ? 'batting team' : 'bowling team';
+    Alert.alert('Add Player', `Add "${name}" to ${teamLabel}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Add',
         onPress: () => {
-          setMatch(prev => ({ ...prev, players: [...prev.players, name] }));
+          if (team === 'batting') {
+            if (match.players.includes(name)) {
+              Alert.alert('Duplicate', `${name} is already in batting team.`);
+              return;
+            }
+            setMatch(prev => ({ ...prev, players: [...prev.players, name] }));
+          } else {
+            if ((match.bowlingPlayers || []).includes(name)) {
+              Alert.alert('Duplicate', `${name} is already in bowling team.`);
+              return;
+            }
+            setMatch(prev => ({
+              ...prev,
+              bowlingPlayers: [...(prev.bowlingPlayers || []), name],
+            }));
+          }
           setNewPlayer('');
         }
       }
@@ -264,16 +276,25 @@ export default function HomeScreen() {
     }
 
     else if (type === 'noBall') {
+      // NB = 1 penalty run, no runs scored, not a legal delivery
       updated.runs += 1;
+      updated.extras = (updated.extras || 0) + 1;
       newBowlerStats[updated.bowler].runs += 1;
-      ballEvent.text = 'No Ball +1';
+      ballEvent.text = 'No Ball';
+      updated.freeHit = true; // next ball is free hit
     }
 
     else if (type === 'noBallRun') {
-      updated.runs += (1 + run);
-      updated.balls += 1;
-      newBowlerStats[updated.bowler].runs += (1 + run);
-      ballEvent.text = `No Ball + ${run}`;
+      // NB + runs scored: total = 1 penalty + runs
+      const total = 1 + run;
+      updated.runs += total;
+      updated.extras = (updated.extras || 0) + 1; // only penalty is extra
+      newBowlerStats[updated.bowler].runs += total;
+      // swap striker on odd runs
+      if (run % 2 !== 0)
+        [updated.striker, updated.nonStriker] = [updated.nonStriker, updated.striker];
+      ballEvent.text = `NB+${run} (${total})`;
+      updated.freeHit = true; // next ball is free hit
     }
 
     else if (type === 'bye') {
@@ -290,7 +311,9 @@ export default function HomeScreen() {
     updated.ballHistory = [ballEvent, ...(updated.ballHistory || [])];
 
     // ── END OF OVER ──
-    const isLegalBall = ['run', 'dot', 'wicket', 'bye', 'byeBoundary', 'noBallRun'].includes(type);
+    const isLegalBall = ['run', 'dot', 'wicket', 'bye'].includes(type);
+    // Clear free hit after legal delivery
+    if (isLegalBall) updated.freeHit = false;
     if (isLegalBall && updated.balls % 6 === 0 && updated.balls > 0) {
       [updated.striker, updated.nonStriker] = [updated.nonStriker, updated.striker];
       Alert.alert(
@@ -940,17 +963,28 @@ export default function HomeScreen() {
         </Picker>
       </View>
 
-      {/* ── ADD PLAYER ── */}
-      <TextInput
-        placeholder="Add extra player to batting team"
-        placeholderTextColor="#94a3b8"
-        value={newPlayer}
-        onChangeText={setNewPlayer}
-        style={styles.input}
-      />
-      <TouchableOpacity style={styles.btnBlue} onPress={addPlayer}>
-        <Text style={styles.btnText}>Add Player</Text>
-      </TouchableOpacity>
+      {/* ── ADD PLAYER — Batting or Bowling team ── */}
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
+        <TextInput
+          placeholder="Add player name"
+          placeholderTextColor="#94a3b8"
+          value={newPlayer}
+          onChangeText={setNewPlayer}
+          style={[styles.input, { flex: 1, marginBottom: 0 }]}
+        />
+      </View>
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+        <TouchableOpacity
+          style={[styles.btnBlue, { flex: 1 }]}
+          onPress={() => addPlayer('batting')}>
+          <Text style={styles.btnText}>+ Batting</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.btnBlue, { flex: 1, backgroundColor: '#f59e0b' }]}
+          onPress={() => addPlayer('bowling')}>
+          <Text style={styles.btnText}>+ Bowling</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* ── SCORING CONTROLS ── */}
       <Text style={styles.sectionTitle}>Score Ball</Text>
@@ -998,15 +1032,37 @@ export default function HomeScreen() {
         ))}
       </View>
 
-      {/* ── No Ball + Bye buttons ── */}
+      {/* ── No Ball buttons ── */}
       <View style={styles.sectionLabel}>
-        <Text style={styles.sectionLabelText}>Extras</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={styles.sectionLabelText}>No Ball</Text>
+          {match.freeHit && (
+            <View style={{ backgroundColor: '#f59e0b', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 }}>
+              <Text style={{ color: '#0f172a', fontSize: 10, fontWeight: 'bold' }}>⚡ FREE HIT</Text>
+            </View>
+          )}
+        </View>
       </View>
       <View style={styles.row}>
         <TouchableOpacity style={[styles.btnSmall, { backgroundColor: '#7c3aed' }]}
           onPress={() => addBall('noBall')}>
-          <Text style={styles.btnText}>No Ball</Text>
+          <Text style={styles.btnText}>NB</Text>
         </TouchableOpacity>
+        {[1, 2, 3, 4, 6].map(r => (
+          <TouchableOpacity
+            key={r}
+            style={[styles.btnSmall, { backgroundColor: '#7c3aed' }]}
+            onPress={() => addBall('noBallRun', r)}>
+            <Text style={styles.btnText}>NB+{r}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* ── Bye buttons ── */}
+      <View style={styles.sectionLabel}>
+        <Text style={styles.sectionLabelText}>Byes</Text>
+      </View>
+      <View style={styles.row}>
         {[1, 2, 3, 4].map(r => (
           <TouchableOpacity
             key={r}

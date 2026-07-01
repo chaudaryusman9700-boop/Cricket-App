@@ -65,6 +65,10 @@ export default function HomeScreen() {
   const [bowlerStats, setBowlerStats] = useState(resumeData?.bowlerStats || {});
   const [newPlayer, setNewPlayer] = useState('');
   const [showNewBatsmanModal, setShowNewBatsmanModal] = useState(false);
+  const [showBowlerModal, setShowBowlerModal] = useState(false);
+  const [selectedNewBowler, setSelectedNewBowler] = useState('');
+  const [retiredHurtBatsmen, setRetiredHurtBatsmen] = useState([]);
+  const [showRetiredHurtModal, setShowRetiredHurtModal] = useState(false);
   const [selectedNewBatsman, setSelectedNewBatsman] = useState('');
   const [dismissedBatsmen, setDismissedBatsmen] = useState([]);
   const [inningsOver, setInningsOver] = useState(false);
@@ -316,11 +320,15 @@ export default function HomeScreen() {
     // Clear free hit after legal delivery
     if (isLegalBall) updated.freeHit = false;
     if (isLegalBall && updated.balls % 6 === 0 && updated.balls > 0) {
+      // ── End of over: swap striker + show bowler change modal ──
       [updated.striker, updated.nonStriker] = [updated.nonStriker, updated.striker];
-      Alert.alert(
-        'Over Complete!',
-        `End of over ${Math.floor(updated.balls / 6)}.\nStriker is now: ${updated.striker}`
+      const overNum = Math.floor(updated.balls / 6);
+      // Pre-select first available bowler (not current bowler)
+      const availBowlers = (updated.bowlingPlayers || []).filter(
+        p => p !== updated.bowler
       );
+      setSelectedNewBowler(availBowlers[0] || '');
+      setShowBowlerModal(true);
     }
 
     // ── CHECK INNINGS END: all out OR overs complete ──
@@ -381,6 +389,63 @@ export default function HomeScreen() {
     Alert.alert(
       '🏏 New Batsman',
       `${selectedNewBatsman} is coming in to bat on strike.`
+    );
+  };
+
+  // ── Confirm new bowler at end of over ──
+  const confirmNewBowler = () => {
+    if (!selectedNewBowler) {
+      Alert.alert('Select Bowler', 'Please select the bowler for this over.');
+      return;
+    }
+    setMatch(prev => ({ ...prev, bowler: selectedNewBowler }));
+    setShowBowlerModal(false);
+  };
+
+  // ── Retired Hurt — batsman leaves but is NOT out ──
+  const retireHurt = (playerName) => {
+    Alert.alert(
+      '🏥 Retired Hurt',
+      `${playerName} is retiring hurt. They can come back to bat later.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: () => {
+            setRetiredHurtBatsmen(prev => [...prev, playerName]);
+            // Treat like a wicket for batsman replacement, but NOT counted as out
+            const avail = match.players.filter(
+              p => p !== match.nonStriker &&
+                   p !== match.bowler &&
+                   !dismissedBatsmen.includes(p) &&
+                   !retiredHurtBatsmen.includes(p) &&
+                   p !== playerName
+            );
+            setSelectedNewBatsman(avail[0] || '');
+            setMatch(prev => ({ ...prev, striker: avail[0] || '' }));
+            setShowNewBatsmanModal(true);
+            setShowRetiredHurtModal(false);
+          }
+        }
+      ]
+    );
+  };
+
+  // ── Retired hurt batsman comes back ──
+  const returnFromRetiredHurt = (playerName) => {
+    Alert.alert(
+      '🏏 Return from Retired Hurt',
+      `${playerName} is coming back to bat.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: () => {
+            setRetiredHurtBatsmen(prev => prev.filter(p => p !== playerName));
+            setMatch(prev => ({ ...prev, striker: playerName }));
+          }
+        }
+      ]
     );
   };
 
@@ -688,6 +753,83 @@ export default function HomeScreen() {
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
     >
+
+      {/* ── BOWLER CHANGE MODAL ── */}
+      <Modal visible={showBowlerModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>🎯 Over Complete!</Text>
+            <Text style={{ color: '#94a3b8', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
+              Select bowler for the next over
+            </Text>
+            <Text style={styles.label}>Bowler (bowling team)</Text>
+            <View style={styles.pickerWrap}>
+              <Picker
+                selectedValue={selectedNewBowler}
+                onValueChange={setSelectedNewBowler}
+                style={{ color: '#fff' }}
+              >
+                {(match.bowlingPlayers || []).map((p, i) => (
+                  <Picker.Item key={i} label={p} value={p} />
+                ))}
+              </Picker>
+            </View>
+            {selectedNewBowler === match.bowler && (
+              <Text style={{ color: '#f59e0b', fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
+                ⚠️ Same bowler cannot bowl consecutive overs
+              </Text>
+            )}
+            <TouchableOpacity
+              style={[styles.btnGreen, selectedNewBowler === match.bowler && { opacity: 0.5 }]}
+              onPress={confirmNewBowler}
+              disabled={selectedNewBowler === match.bowler}
+            >
+              <Text style={styles.btnText}>✅ Confirm Bowler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── RETIRED HURT MODAL ── */}
+      <Modal visible={showRetiredHurtModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>🏥 Retired Hurt</Text>
+            <Text style={{ color: '#94a3b8', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
+              Select batsman retiring hurt
+            </Text>
+            {[match.striker, match.nonStriker].filter(Boolean).map((p, i) => (
+              <TouchableOpacity
+                key={i}
+                style={[styles.btnBlue, { marginBottom: 8 }]}
+                onPress={() => retireHurt(p)}
+              >
+                <Text style={styles.btnText}>🏏 {p}</Text>
+              </TouchableOpacity>
+            ))}
+            {retiredHurtBatsmen.length > 0 && (
+              <>
+                <Text style={[styles.label, { marginTop: 12 }]}>Return from Retired Hurt:</Text>
+                {retiredHurtBatsmen.map((p, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[styles.btnBlue, { marginBottom: 8, backgroundColor: '#22c55e' }]}
+                    onPress={() => returnFromRetiredHurt(p)}
+                  >
+                    <Text style={styles.btnText}>↩️ {p} (return)</Text>
+                  </TouchableOpacity>
+                ))}
+              </>
+            )}
+            <TouchableOpacity
+              style={[styles.btnGreen, { backgroundColor: '#334155', marginTop: 8 }]}
+              onPress={() => setShowRetiredHurtModal(false)}
+            >
+              <Text style={styles.btnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── NEW BATSMAN MODAL ── */}
       <Modal visible={showNewBatsmanModal} transparent animationType="slide">
@@ -1028,6 +1170,11 @@ export default function HomeScreen() {
         </TouchableOpacity>
         <TouchableOpacity style={[styles.btn, styles.btnRed]} onPress={() => addBall('wicket')}>
           <Text style={styles.btnText}>Wicket</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.btn, { backgroundColor: '#0891b2' }]}
+          onPress={() => setShowRetiredHurtModal(true)}>
+          <Text style={styles.btnText}>Ret. Hurt</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.btn, styles.btnUndo]} onPress={undoLastBall}>
           <Text style={styles.btnText}>Undo</Text>

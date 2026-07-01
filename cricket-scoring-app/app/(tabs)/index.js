@@ -23,7 +23,7 @@ const DEFAULT_SETUP = {
 };
 
 // ── Replace with your actual API key from openweathermap.org ──
-const WEATHER_API_KEY = 'YOUR_API_KEY_HERE';
+const WEATHER_API_KEY = '2044c6ee71414f0d858bd4bcbd55e041';
 
 export default function SetupScreen() {
   const router = useRouter();

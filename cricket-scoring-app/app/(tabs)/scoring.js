@@ -66,6 +66,7 @@ export default function HomeScreen() {
   const [newPlayer, setNewPlayer] = useState('');
   const [showNewBatsmanModal, setShowNewBatsmanModal] = useState(false);
   const [selectedNewBatsman, setSelectedNewBatsman] = useState('');
+  const [dismissedBatsmen, setDismissedBatsmen] = useState([]);
   const [inningsOver, setInningsOver] = useState(false);
   // For new match (setup passed) always start innings at 1
   const [innings, setInnings] = useState(
@@ -338,13 +339,24 @@ export default function HomeScreen() {
     setBatsmenStats(newBatsmenStats);
     setBowlerStats(newBowlerStats);
 
+    // ── Check if match is over after every ball ──
+    if (checkMatchResult(updated)) return;
+
     if (type === 'wicket') {
+      // Track who just got out
+      const justOut = updated.striker;
+      const newDismissed = [...dismissedBatsmen, justOut];
+      setDismissedBatsmen(newDismissed);
+
       // Don't show new batsman modal if innings is already over
       const allOut = updated.wickets >= updated.players.length - 1;
       const oversComplete = updated.balls >= updated.totalOvers * 6;
       if (!allOut && !oversComplete) {
+        // Exclude: non-striker, bowler, and ALL previously dismissed batsmen
         const avail = updated.players.filter(
-          p => p !== updated.nonStriker && p !== updated.bowler
+          p => p !== updated.nonStriker &&
+               p !== updated.bowler &&
+               !newDismissed.includes(p)
         );
         // Auto-set next batsman immediately so buttons update right away
         const nextBatsman = avail[0] || '';
@@ -374,6 +386,7 @@ export default function HomeScreen() {
 
   // ── Start second innings ──
   const startSecondInnings = () => {
+    setDismissedBatsmen([]); // reset for 2nd innings
     // Correctly identify teams using setup data
     const team1Name = setup?.teamA?.name || match.battingTeam || 'Team A';
     const team2Name = setup?.teamB?.name || match.bowlingTeam || 'Team B';
@@ -687,7 +700,11 @@ export default function HomeScreen() {
               style={{ color: '#fff' }}
             >
               {match.players
-                .filter(p => p !== match.nonStriker && p !== match.bowler)
+                .filter(p =>
+                  p !== match.nonStriker &&
+                  p !== match.bowler &&
+                  !dismissedBatsmen.includes(p)
+                )
                 .map((p, i) => <Picker.Item key={i} label={p} value={p} />)}
             </Picker>
             <TouchableOpacity style={styles.btnGreen} onPress={confirmNewBatsman}>

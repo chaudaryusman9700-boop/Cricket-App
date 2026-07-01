@@ -38,10 +38,6 @@ export default function RootLayout() {
         options={{ title: 'Schedule Match' }}
       />
       <Stack.Screen
-        name="matchday"
-        options={{ title: 'Match Day' }}
-      />
-      <Stack.Screen
         name="coaching"
         options={{ title: 'AI Coach' }}
       />

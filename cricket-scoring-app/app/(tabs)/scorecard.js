@@ -533,12 +533,12 @@ export default function ScorecardScreen() {
                 by {computedResult.margin}
               </Text>
             )}
-            <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
+            <View style={{ flexDirection: 'row', gap: 16, marginTop: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
               <Text style={{ color: '#64748b', fontSize: 12 }}>
-                {computedResult.firstTeam}: {computedResult.firstScore}
+                {computedResult.firstTeam}: {computedResult.firstScore} ({fi ? getOvers(fi.balls) : '—'} ov)
               </Text>
               <Text style={{ color: '#64748b', fontSize: 12 }}>
-                {computedResult.secondTeam}: {computedResult.secondScore}
+                {computedResult.secondTeam}: {computedResult.secondScore} ({getOvers(match.balls)} ov)
               </Text>
             </View>
             {computedResult.motm && computedResult.motm !== '—' && (
@@ -553,7 +553,7 @@ export default function ScorecardScreen() {
         <Text style={styles.teamName}>{match.battingTeam}</Text>
         <Text style={styles.bigScore}>{match.runs}/{match.wickets}</Text>
         <Text style={styles.oversText}>({getOvers(match.balls)} ov) · RR: {runRate}</Text>
-        {fi && <Text style={styles.firstInningsRef}>1st Inn: {fi.team} {fi.runs}/{fi.wickets}</Text>}
+        {fi && <Text style={styles.firstInningsRef}>1st Inn: {fi.team} {fi.runs}/{fi.wickets} ({getOvers(fi.balls)} ov)</Text>}
         {match.venue ? <Text style={styles.metaText}>📍 {match.venue}</Text> : null}
         {match.matchDate ? <Text style={styles.metaText}>📅 {match.matchDate} {match.matchTime}</Text> : null}
       </View>

@@ -68,6 +68,9 @@ export default function HomeScreen() {
   const [showBowlerModal, setShowBowlerModal] = useState(false);
   const [selectedNewBowler, setSelectedNewBowler] = useState('');
   const [retiredHurtBatsmen, setRetiredHurtBatsmen] = useState([]);
+  const [showWides, setShowWides] = useState(false);
+  const [showNoBalls, setShowNoBalls] = useState(false);
+  const [showByes, setShowByes] = useState(false);
   const [showRetiredHurtModal, setShowRetiredHurtModal] = useState(false);
   const [selectedNewBatsman, setSelectedNewBatsman] = useState('');
   const [dismissedBatsmen, setDismissedBatsmen] = useState([]);
@@ -113,9 +116,28 @@ export default function HomeScreen() {
       const payload = JSON.stringify({ match, batsmenStats, bowlerStats, savedAt: Date.now() });
       await AsyncStorage.setItem(key, payload);
       await AsyncStorage.setItem('currentMatch', payload);
-      Alert.alert('Saved', 'Match saved to history ✅');
+      Alert.alert('Saved ✅', 'Match saved to history!');
     } catch {
       Alert.alert('Error', 'Save failed ❌');
+    }
+  };
+
+  // ── Auto save silently when match ends ──
+  const autoSaveMatch = async (matchData, bStats, bwStats) => {
+    try {
+      const key = 'match_' + Date.now();
+      const payload = JSON.stringify({
+        match: matchData,
+        batsmenStats: bStats,
+        bowlerStats: bwStats,
+        savedAt: Date.now(),
+        autoSaved: true,
+      });
+      await AsyncStorage.setItem(key, payload);
+      await AsyncStorage.setItem('currentMatch', payload);
+      console.log('Match auto-saved ✅');
+    } catch (e) {
+      console.log('Auto-save failed:', e);
     }
   };
 
@@ -560,6 +582,12 @@ export default function HomeScreen() {
     AsyncStorage.setItem('matchResult', JSON.stringify(resultData)).catch(() => {});
     setFirstInningsScore(prev => ({ ...prev, result: resultData }));
     setShowInningsModal(true);
+    // ── Auto save match when it ends ──
+    autoSaveMatch(
+      { ...updated, matchResult: resultData },
+      batsmenStats,
+      bowlerStats
+    );
   };
 
   const checkMatchResult = (updated) => {
@@ -1053,9 +1081,14 @@ export default function HomeScreen() {
                 ]}>
                   {p}{isStriker ? ' *' : ''}
                 </Text>
-                {isOut && (
+                {isOut && !retiredHurtBatsmen.includes(p) && (
                   <Text style={{ fontSize: 10, color: '#ef4444', fontWeight: '600' }}>
                     (out)
+                  </Text>
+                )}
+                {retiredHurtBatsmen.includes(p) && (
+                  <Text style={{ fontSize: 10, color: '#f59e0b', fontWeight: '600' }}>
+                    (ret. hurt)
                   </Text>
                 )}
               </View>
@@ -1181,61 +1214,62 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ── Wide buttons ── */}
-      <View style={styles.sectionLabel}>
-        <Text style={styles.sectionLabelText}>Wides</Text>
-      </View>
-      <View style={styles.row}>
-        {[0, 1, 2, 3, 4].map(r => (
-          <TouchableOpacity
-            key={r}
-            style={[styles.btnSmall, { backgroundColor: '#b45309' }]}
-            onPress={() => r === 0 ? addBall('wide') : addBall('wideRun', r)}>
-            <Text style={styles.btnText}>{r === 0 ? 'Wd' : `Wd+${r}`}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* ── No Ball buttons ── */}
-      <View style={styles.sectionLabel}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={styles.sectionLabelText}>No Ball</Text>
-          {match.freeHit && (
-            <View style={{ backgroundColor: '#f59e0b', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 }}>
-              <Text style={{ color: '#0f172a', fontSize: 10, fontWeight: 'bold' }}>⚡ FREE HIT</Text>
-            </View>
-          )}
+      {/* ── Collapsible Wide section ── */}
+      <TouchableOpacity
+        style={styles.extraHeader}
+        onPress={() => setShowWides(prev => !prev)}>
+        <Text style={styles.extraHeaderText}>
+          🏏 Wide {showWides ? '▲' : '▼'}
+        </Text>
+        {match.freeHit && <View style={styles.freeHitBadge}><Text style={styles.freeHitText}>⚡ FREE HIT</Text></View>}
+      </TouchableOpacity>
+      {showWides && (
+        <View style={styles.row}>
+          {[0,1,2,3,4].map(r => (
+            <TouchableOpacity key={r}
+              style={[styles.btnSmall, { backgroundColor: '#b45309' }]}
+              onPress={() => { r === 0 ? addBall('wide') : addBall('wideRun', r); setShowWides(false); }}>
+              <Text style={styles.btnText}>{r === 0 ? 'Wd' : `Wd+${r}`}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
-      </View>
-      <View style={styles.row}>
-        <TouchableOpacity style={[styles.btnSmall, { backgroundColor: '#7c3aed' }]}
-          onPress={() => addBall('noBall')}>
-          <Text style={styles.btnText}>NB</Text>
-        </TouchableOpacity>
-        {[1, 2, 3, 4, 6].map(r => (
-          <TouchableOpacity
-            key={r}
-            style={[styles.btnSmall, { backgroundColor: '#7c3aed' }]}
-            onPress={() => addBall('noBallRun', r)}>
-            <Text style={styles.btnText}>NB+{r}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      )}
 
-      {/* ── Bye buttons ── */}
-      <View style={styles.sectionLabel}>
-        <Text style={styles.sectionLabelText}>Byes</Text>
-      </View>
-      <View style={styles.row}>
-        {[1, 2, 3, 4].map(r => (
-          <TouchableOpacity
-            key={r}
-            style={[styles.btnSmall, { backgroundColor: '#0f766e' }]}
-            onPress={() => addBall('bye', r)}>
-            <Text style={styles.btnText}>Bye {r}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {/* ── Collapsible No Ball section ── */}
+      <TouchableOpacity
+        style={styles.extraHeader}
+        onPress={() => setShowNoBalls(prev => !prev)}>
+        <Text style={styles.extraHeaderText}>🚫 No Ball {showNoBalls ? '▲' : '▼'}</Text>
+      </TouchableOpacity>
+      {showNoBalls && (
+        <View style={styles.row}>
+          {[0,1,2,3,4,6].map(r => (
+            <TouchableOpacity key={r}
+              style={[styles.btnSmall, { backgroundColor: '#7c3aed' }]}
+              onPress={() => { r === 0 ? addBall('noBall') : addBall('noBallRun', r); setShowNoBalls(false); }}>
+              <Text style={styles.btnText}>{r === 0 ? 'NB' : `NB+${r}`}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* ── Collapsible Bye section ── */}
+      <TouchableOpacity
+        style={styles.extraHeader}
+        onPress={() => setShowByes(prev => !prev)}>
+        <Text style={styles.extraHeaderText}>🏃 Bye {showByes ? '▲' : '▼'}</Text>
+      </TouchableOpacity>
+      {showByes && (
+        <View style={styles.row}>
+          {[1,2,3,4].map(r => (
+            <TouchableOpacity key={r}
+              style={[styles.btnSmall, { backgroundColor: '#0f766e' }]}
+              onPress={() => { addBall('bye', r); setShowByes(false); }}>
+              <Text style={styles.btnText}>Bye {r}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {/* ── OVER-BY-OVER LOG ── */}
       <View style={styles.card}>
@@ -1264,7 +1298,9 @@ export default function HomeScreen() {
 
       {/* ── Row 1: Save Match ── */}
       <TouchableOpacity style={[styles.btnGreen, { marginTop: 10 }]} onPress={saveMatch}>
-        <Text style={styles.btnText}>💾 Save Match</Text>
+        <Text style={styles.btnText}>
+          {matchResult ? '💾 Save Again' : '💾 Save Match'}
+        </Text>
       </TouchableOpacity>
 
       {/* ── Row 2: Navigation buttons ── */}
@@ -1354,6 +1390,10 @@ const styles = StyleSheet.create({
     borderRadius: 10, flex: 1, alignItems: 'center'
   },
   sectionLabel: { paddingHorizontal: 4, marginTop: 6, marginBottom: 2 },
+  extraHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1e293b', borderRadius: 10, padding: 12, marginTop: 6, marginBottom: 2 },
+  extraHeaderText: { color: '#e2e8f0', fontWeight: '600', fontSize: 13 },
+  freeHitBadge: { backgroundColor: '#f59e0b', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
+  freeHitText: { color: '#0f172a', fontSize: 10, fontWeight: 'bold' },
   sectionLabelText: { color: '#64748b', fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
   btnSmall: {
     backgroundColor: '#334155', paddingVertical: 12, paddingHorizontal: 6,

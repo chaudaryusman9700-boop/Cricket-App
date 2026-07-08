@@ -67,13 +67,19 @@ export default function HomeScreen() {
   const [showNewBatsmanModal, setShowNewBatsmanModal] = useState(false);
   const [showBowlerModal, setShowBowlerModal] = useState(false);
   const [selectedNewBowler, setSelectedNewBowler] = useState('');
+  const [bowlerTypes, setBowlerTypes] = useState({}); // tracks spinner/fast/medium per bowler
+  const [selectedBowlerType, setSelectedBowlerType] = useState('Fast');
   const [retiredHurtBatsmen, setRetiredHurtBatsmen] = useState([]);
+  const [bowlerTypes, setBowlerTypes] = useState({}); // { 'Ahmed': 'pacer', 'Saad': 'spinner' }
   const [showWides, setShowWides] = useState(false);
   const [showNoBalls, setShowNoBalls] = useState(false);
   const [showByes, setShowByes] = useState(false);
   const [showRetiredHurtModal, setShowRetiredHurtModal] = useState(false);
   const [selectedNewBatsman, setSelectedNewBatsman] = useState('');
   const [dismissedBatsmen, setDismissedBatsmen] = useState([]);
+  const [bowlerTypes, setBowlerTypes] = useState({}); // { 'Ahmed': 'pacer', 'Ali': 'spinner' }
+  const [showBowlerTypeModal, setShowBowlerTypeModal] = useState(false);
+  const [pendingBowlerName, setPendingBowlerName] = useState('');
   const [inningsOver, setInningsOver] = useState(false);
   // For new match (setup passed) always start innings at 1
   const [innings, setInnings] = useState(
@@ -165,32 +171,32 @@ export default function HomeScreen() {
   const addPlayer = (team = 'batting') => {
     const name = newPlayer.trim();
     if (!name) return;
-    const teamLabel = team === 'batting' ? 'batting team' : 'bowling team';
-    Alert.alert('Add Player', `Add "${name}" to ${teamLabel}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Add',
-        onPress: () => {
-          if (team === 'batting') {
-            if (match.players.includes(name)) {
-              Alert.alert('Duplicate', `${name} is already in batting team.`);
-              return;
-            }
-            setMatch(prev => ({ ...prev, players: [...prev.players, name] }));
-          } else {
-            if ((match.bowlingPlayers || []).includes(name)) {
-              Alert.alert('Duplicate', `${name} is already in bowling team.`);
-              return;
-            }
-            setMatch(prev => ({
-              ...prev,
-              bowlingPlayers: [...(prev.bowlingPlayers || []), name],
-            }));
-          }
-          setNewPlayer('');
-        }
+    if (team === 'batting') {
+      if (match.players.includes(name)) {
+        Alert.alert('Duplicate', `${name} is already in batting team.`); return;
       }
-    ]);
+      setMatch(prev => ({ ...prev, players: [...prev.players, name] }));
+      setNewPlayer('');
+    } else {
+      if ((match.bowlingPlayers || []).includes(name)) {
+        Alert.alert('Duplicate', `${name} is already in bowling team.`); return;
+      }
+      // Ask bowler type before adding
+      setPendingBowlerName(name);
+      setShowBowlerTypeModal(true);
+    }
+  };
+
+  const confirmBowlerType = (type) => {
+    const name = pendingBowlerName;
+    setBowlerTypes(prev => ({ ...prev, [name]: type }));
+    setMatch(prev => ({
+      ...prev,
+      bowlingPlayers: [...(prev.bowlingPlayers || []), name],
+    }));
+    setNewPlayer('');
+    setShowBowlerTypeModal(false);
+    setPendingBowlerName('');
   };
 
   // ─── UNDO LAST BALL ─────────────────────────────────────────────
@@ -345,12 +351,31 @@ export default function HomeScreen() {
       // ── End of over: swap striker + show bowler change modal ──
       [updated.striker, updated.nonStriker] = [updated.nonStriker, updated.striker];
       const overNum = Math.floor(updated.balls / 6);
-      // Pre-select first available bowler (not current bowler)
-      const availBowlers = (updated.bowlingPlayers || []).filter(
-        p => p !== updated.bowler
-      );
+      const maxOversPerBowler = Math.floor(updated.totalOvers / 5) || 1;
+
+      // Check if current bowler has hit their limit
+      const currentBowlerBalls = (newBowlerStats[updated.bowler]?.balls || 0);
+      const currentBowlerOvers = Math.floor(currentBowlerBalls / 6);
+      const bowlerAtLimit = currentBowlerOvers >= maxOversPerBowler;
+
+      // Filter available bowlers — not same bowler + not at limit
+      const availBowlers = (updated.bowlingPlayers || []).filter(p => {
+        if (p === updated.bowler) return false; // can't bowl consecutive
+        const bowlerBalls = newBowlerStats[p]?.balls || 0;
+        const bowlerOvers = Math.floor(bowlerBalls / 6);
+        return bowlerOvers < maxOversPerBowler;
+      });
+
       setSelectedNewBowler(availBowlers[0] || '');
       setShowBowlerModal(true);
+
+      if (bowlerAtLimit) {
+        Alert.alert(
+          '⚠️ Bowler Limit Reached',
+          `${updated.bowler} has completed their ${maxOversPerBowler} over quota!`,
+          [{ text: 'OK' }]
+        );
+      }
     }
 
     // ── CHECK INNINGS END: all out OR overs complete ──
@@ -420,6 +445,19 @@ export default function HomeScreen() {
       Alert.alert('Select Bowler', 'Please select the bowler for this over.');
       return;
     }
+    // Check max overs per bowler (1/5 of total overs, min 1)
+    const maxOvers = Math.max(Math.floor(match.totalOvers / 5), 1);
+    const bowlerBalls = bowlerStats[selectedNewBowler]?.balls || 0;
+    const bowlerFullOvers = Math.floor(bowlerBalls / 6);
+    if (bowlerFullOvers >= maxOvers) {
+      Alert.alert(
+        '⛔ Over Limit Reached',
+        `${selectedNewBowler} has already bowled ${bowlerFullOvers} overs. Max is ${maxOvers} overs. Please select another bowler.`
+      );
+      return;
+    }
+    // Save bowler type for AI coaching reference
+    setBowlerTypes(prev => ({ ...prev, [selectedNewBowler]: selectedBowlerType }));
     setMatch(prev => ({ ...prev, bowler: selectedNewBowler }));
     setShowBowlerModal(false);
   };
@@ -721,6 +759,14 @@ export default function HomeScreen() {
 
   // ─── HELPERS ────────────────────────────────────────────────────
   const getOvers = () => `${Math.floor(match.balls / 6)}.${match.balls % 6}`;
+  // Format bowler overs correctly: 8 balls = 1.2 overs (1 full over + 2 balls)
+  const getBowlerOvers = (balls) => {
+    if (!balls || balls === 0) return '0.0';
+    const fullOvers = Math.floor(balls / 6);
+    const remBalls = balls % 6;
+    // Show X.0 for complete overs, X.1-X.5 for partial
+    return remBalls === 0 ? `${fullOvers}.0` : `${fullOvers}.${remBalls}`;
+  };
 
   const getRunRate = () => {
     if (match.balls === 0) return '0.00';
@@ -772,7 +818,7 @@ export default function HomeScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: '#14532d' }}
+      style={{ flex: 1, backgroundColor: '#1a1008' }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       enabled={Platform.OS === 'ios'}
     >
@@ -787,7 +833,7 @@ export default function HomeScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>🎯 Over Complete!</Text>
-            <Text style={{ color: '#94a3b8', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
+            <Text style={{ color: '#fdba74', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
               Select bowler for the next over
             </Text>
             <Text style={styles.label}>Bowler (bowling team)</Text>
@@ -797,9 +843,19 @@ export default function HomeScreen() {
                 onValueChange={setSelectedNewBowler}
                 style={{ color: '#fff' }}
               >
-                {(match.bowlingPlayers || []).map((p, i) => (
-                  <Picker.Item key={i} label={p} value={p} />
-                ))}
+                {(match.bowlingPlayers || []).map((p, i) => {
+                  const bowlerBalls = bowlerStats[p]?.balls || 0;
+                  const maxOvers = Math.ceil(match.totalOvers / 5);
+                  const bowlerFullOvers = Math.floor(bowlerBalls / 6);
+                  const atLimit = bowlerFullOvers >= maxOvers;
+                  return (
+                    <Picker.Item
+                      key={i}
+                      label={`${p}${atLimit ? ' (limit reached)' : ''} — ${getBowlerOvers(bowlerBalls)} ov ${bowlerTypes[p] ? `(${bowlerTypes[p]})` : ''}`}
+                      value={p}
+                    />
+                  );
+                })}
               </Picker>
             </View>
             {selectedNewBowler === match.bowler && (
@@ -807,6 +863,26 @@ export default function HomeScreen() {
                 ⚠️ Same bowler cannot bowl consecutive overs
               </Text>
             )}
+
+            {/* ── Bowler type selection ── */}
+            <Text style={styles.label}>Bowler type</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              {['Fast', 'Medium', 'Spinner'].map(type => (
+                <TouchableOpacity
+                  key={type}
+                  style={{
+                    flex: 1, padding: 10, borderRadius: 10, alignItems: 'center',
+                    backgroundColor: selectedBowlerType === type ? '#22c55e' : 'rgba(0,0,0,0.3)',
+                    borderWidth: 1, borderColor: selectedBowlerType === type ? '#4ade80' : 'rgba(255,255,255,0.2)',
+                  }}
+                  onPress={() => setSelectedBowlerType(type)}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>
+                    {type === 'Fast' ? '⚡ Fast' : type === 'Medium' ? '🎯 Medium' : '🌀 Spinner'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <TouchableOpacity
               style={[styles.btnGreen, selectedNewBowler === match.bowler && { opacity: 0.5 }]}
               onPress={confirmNewBowler}
@@ -823,7 +899,7 @@ export default function HomeScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>🏥 Retired Hurt</Text>
-            <Text style={{ color: '#94a3b8', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
+            <Text style={{ color: '#fdba74', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
               Select batsman retiring hurt
             </Text>
             {[match.striker, match.nonStriker].filter(Boolean).map((p, i) => (
@@ -850,10 +926,37 @@ export default function HomeScreen() {
               </>
             )}
             <TouchableOpacity
-              style={[styles.btnGreen, { backgroundColor: '#334155', marginTop: 8 }]}
+              style={[styles.btnGreen, { backgroundColor: '#3d2200', marginTop: 8 }]}
               onPress={() => setShowRetiredHurtModal(false)}
             >
               <Text style={styles.btnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── BOWLER TYPE MODAL ── */}
+      <Modal visible={showBowlerTypeModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>🎯 Add Bowler</Text>
+            <Text style={{ color: '#bbf7d0', fontSize: 14, marginBottom: 20, textAlign: 'center' }}>
+              What type of bowler is {pendingBowlerName}?
+            </Text>
+            <TouchableOpacity
+              style={[styles.btnGreen, { marginBottom: 10 }]}
+              onPress={() => confirmBowlerType('pacer')}>
+              <Text style={styles.btnText}>⚡ Pacer (Fast Bowler)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.btnGreen, { backgroundColor: '#7c3aed', borderColor: '#c084fc', marginBottom: 10 }]}
+              onPress={() => confirmBowlerType('spinner')}>
+              <Text style={styles.btnText}>🌀 Spinner</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.btnGreen, { backgroundColor: 'rgba(0,0,0,0.3)', borderColor: 'rgba(255,255,255,0.2)' }]}
+              onPress={() => confirmBowlerType('unknown')}>
+              <Text style={styles.btnText}>❓ Not Sure</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -891,7 +994,7 @@ export default function HomeScreen() {
             <Text style={styles.modalTitle}>
               {innings === 1 ? '1st Innings Complete!' : 'Match Over!'}
             </Text>
-            <Text style={{ color: '#94a3b8', textAlign: 'center', marginBottom: 8 }}>
+            <Text style={{ color: '#fdba74', textAlign: 'center', marginBottom: 8 }}>
               {firstInningsScore?.team} scored
             </Text>
             <Text style={{ color: '#38bdf8', fontSize: 40, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 }}>
@@ -899,7 +1002,7 @@ export default function HomeScreen() {
             </Text>
             {innings === 1 && (
               <>
-                <Text style={{ color: '#94a3b8', textAlign: 'center', marginBottom: 4 }}>
+                <Text style={{ color: '#fdba74', textAlign: 'center', marginBottom: 4 }}>
                   1st Innings Complete
                 </Text>
                 <Text style={{ color: '#22c55e', fontWeight: 'bold', textAlign: 'center', fontSize: 15, marginBottom: 16 }}>
@@ -914,7 +1017,7 @@ export default function HomeScreen() {
                   <Text style={styles.btnText}>Start 2nd Innings →</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.btnGreen, { backgroundColor: '#334155', marginTop: 10 }]}
+                  style={[styles.btnGreen, { backgroundColor: '#3d2200', marginTop: 10 }]}
                   onPress={() => { setShowInningsModal(false); router.push('/history'); }}>
                   <Text style={styles.btnText}>End Match & Save</Text>
                 </TouchableOpacity>
@@ -928,25 +1031,25 @@ export default function HomeScreen() {
                 <>
                   {/* Match result banner */}
                   {resultData && (
-                    <View style={{ backgroundColor: '#0f172a', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                    <View style={{ backgroundColor: '#2a1000', borderRadius: 12, padding: 14, marginBottom: 12 }}>
                       <Text style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: 18, textAlign: 'center' }}>
                         {resultData.resultType === 'tie' ? '🤝 Match Tied!' : `🏆 ${resultData.winner} Won!`}
                       </Text>
                       {resultData.resultType !== 'tie' && (
-                        <Text style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', marginTop: 4 }}>
+                        <Text style={{ color: '#fdba74', fontSize: 13, textAlign: 'center', marginTop: 4 }}>
                           by {resultData.margin}
                         </Text>
                       )}
                       <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 12 }}>
                         <View style={{ alignItems: 'center' }}>
-                          <Text style={{ color: '#64748b', fontSize: 11 }}>1st Inn</Text>
+                          <Text style={{ color: '#92400e', fontSize: 11 }}>1st Inn</Text>
                           <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>{resultData.firstScore}</Text>
-                          <Text style={{ color: '#94a3b8', fontSize: 11 }}>{resultData.firstTeam}</Text>
+                          <Text style={{ color: '#fdba74', fontSize: 11 }}>{resultData.firstTeam}</Text>
                         </View>
                         <View style={{ alignItems: 'center' }}>
-                          <Text style={{ color: '#64748b', fontSize: 11 }}>2nd Inn</Text>
+                          <Text style={{ color: '#92400e', fontSize: 11 }}>2nd Inn</Text>
                           <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>{resultData.secondScore}</Text>
-                          <Text style={{ color: '#94a3b8', fontSize: 11 }}>{resultData.secondTeam}</Text>
+                          <Text style={{ color: '#fdba74', fontSize: 11 }}>{resultData.secondTeam}</Text>
                         </View>
                       </View>
                     </View>
@@ -956,7 +1059,7 @@ export default function HomeScreen() {
                     <View style={{ backgroundColor: '#1a1a0a', borderRadius: 12, padding: 12, marginBottom: 12, alignItems: 'center', borderWidth: 1, borderColor: '#f59e0b' }}>
                       <Text style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: 13, marginBottom: 4 }}>🌟 Man of the Match</Text>
                       <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>{motm.name}</Text>
-                      <Text style={{ color: '#94a3b8', fontSize: 12, marginTop: 4 }}>
+                      <Text style={{ color: '#fdba74', fontSize: 12, marginTop: 4 }}>
                         {motm.runs > 0 ? `${motm.runs} runs (${motm.balls}b)` : ''}
                         {motm.runs > 0 && motm.wickets > 0 ? ' · ' : ''}
                         {motm.wickets > 0 ? `${motm.wickets} wickets` : ''}
@@ -968,7 +1071,7 @@ export default function HomeScreen() {
                     <Text style={styles.btnText}>📋 View Full Scorecard</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.btnGreen, { backgroundColor: '#334155', marginTop: 10 }]}
+                    style={[styles.btnGreen, { backgroundColor: '#3d2200', marginTop: 10 }]}
                     onPress={async () => {
                       setShowInningsModal(false);
                       await saveMatch();
@@ -1027,7 +1130,7 @@ export default function HomeScreen() {
           </>
         )}
         {innings === 2 && (
-          <Text style={{ color: '#64748b', textAlign: 'center', fontSize: 11, marginBottom: 4 }}>
+          <Text style={{ color: '#92400e', textAlign: 'center', fontSize: 11, marginBottom: 4 }}>
             2nd Innings
           </Text>
         )}
@@ -1077,7 +1180,7 @@ export default function HomeScreen() {
               <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={[styles.tableCell, { flex: 0 },
                   isStriker && { color: '#38bdf8', fontWeight: 'bold' },
-                  isOut && { color: '#64748b' }
+                  isOut && { color: '#92400e' }
                 ]}>
                   {p}{isStriker ? ' *' : ''}
                 </Text>
@@ -1093,11 +1196,11 @@ export default function HomeScreen() {
                 )}
               </View>
               <Text style={[styles.tableCell,
-                isOut && { color: '#64748b' },
+                isOut && { color: '#92400e' },
                 !isOut && batsmenStats[p].runs >= 50 && { color: '#f59e0b', fontWeight: 'bold' }
               ]}>{batsmenStats[p].runs}</Text>
-              <Text style={[styles.tableCell, isOut && { color: '#64748b' }]}>{batsmenStats[p].balls}</Text>
-              <Text style={[styles.tableCell, isOut && { color: '#64748b' }]}>{strikeRate(p)}</Text>
+              <Text style={[styles.tableCell, isOut && { color: '#92400e' }]}>{batsmenStats[p].balls}</Text>
+              <Text style={[styles.tableCell, isOut && { color: '#92400e' }]}>{strikeRate(p)}</Text>
             </View>
           );
         })}
@@ -1117,10 +1220,19 @@ export default function HomeScreen() {
         </View>
         {Object.keys(bowlerStats).map((b, i) => (
           <View key={i} style={styles.tableRow}>
-            <Text style={[styles.tableCell, { flex: 2 }, match.bowler === b && { color: '#f59e0b' }]}>
-              {b}{match.bowler === b ? ' *' : ''}
+            <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={[styles.tableCell, { flex: 0 }, match.bowler === b && { color: '#f59e0b', fontWeight: 'bold' }]}>
+                {b}{match.bowler === b ? ' *' : ''}
+              </Text>
+              {bowlerTypes[b] && (
+                <Text style={{ fontSize: 11 }}>
+                  {bowlerTypes[b] === 'spinner' ? '🌀' : '⚡'}
+                </Text>
+              )}
+            </View>
+            <Text style={styles.tableCell}>
+              {getBowlerOvers(bowlerStats[b].balls)}
             </Text>
-            <Text style={styles.tableCell}>{(bowlerStats[b].balls / 6).toFixed(1)}</Text>
             <Text style={styles.tableCell}>{bowlerStats[b].runs}</Text>
             <Text style={styles.tableCell}>{bowlerStats[b].wickets}</Text>
             <Text style={styles.tableCell}>{economy(b)}</Text>
@@ -1306,7 +1418,7 @@ export default function HomeScreen() {
       {/* ── Row 2: Navigation buttons ── */}
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
         <TouchableOpacity
-          style={[styles.navBtn, { backgroundColor: '#334155' }]}
+          style={[styles.navBtn, { backgroundColor: '#3d2200' }]}
           onPress={() => router.push('/history')}>
           <Text style={styles.navBtnText}>📋 History</Text>
         </TouchableOpacity>
@@ -1345,120 +1457,120 @@ export default function HomeScreen() {
 
 // ─── STYLES ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  // ── 🌿 GREEN CRICKET FIELD THEME ──
-  container: { flex: 1, backgroundColor: '#14532d', padding: 16 },
-  title: { fontSize: 24, color: '#fff', textAlign: 'center', marginBottom: 20, fontWeight: 'bold', textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: {width:1,height:1}, textShadowRadius: 4 },
+  // ── 🔥 SUNSET ORANGE THEME ──
+  container: { flex: 1, backgroundColor: '#1a1008', padding: 16 },
+  title: { fontSize: 24, color: '#fff', textAlign: 'center', marginBottom: 20, fontWeight: 'bold' },
 
-  card: { backgroundColor: 'rgba(255,255,255,0.12)', padding: 15, borderRadius: 15, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  score: { fontSize: 52, color: '#fff', textAlign: 'center', fontWeight: 'bold', textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: {width:1,height:1}, textShadowRadius: 4 },
-  overs: { color: '#bbf7d0', textAlign: 'center', fontSize: 15, marginBottom: 4 },
-  runRate: { color: '#fde68a', textAlign: 'center', fontSize: 13, marginBottom: 6, fontWeight: '600' },
-  targetRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 10, padding: 10, marginBottom: 6 },
+  card: { backgroundColor: '#2a1800', padding: 15, borderRadius: 15, marginBottom: 14, borderWidth: 1, borderColor: '#3d2200' },
+  score: { fontSize: 52, color: '#fff', textAlign: 'center', fontWeight: 'bold' },
+  overs: { color: '#fdba74', textAlign: 'center', fontSize: 15, marginBottom: 4 },
+  runRate: { color: '#fb923c', textAlign: 'center', fontSize: 13, marginBottom: 6, fontWeight: '700' },
+  targetRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 10, padding: 10, marginBottom: 6 },
   targetItem: { alignItems: 'center', flex: 1 },
   targetVal: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  targetLabel: { color: '#86efac', fontSize: 10, marginTop: 2 },
-  targetDivider: { width: 0.5, height: 30, backgroundColor: 'rgba(255,255,255,0.3)' },
-  matchStatusText: { color: '#bbf7d0', textAlign: 'center', fontSize: 12, marginBottom: 6 },
-  venueText: { color: '#86efac', textAlign: 'center', fontSize: 12, marginBottom: 2 },
+  targetLabel: { color: '#fdba74', fontSize: 10, marginTop: 2 },
+  targetDivider: { width: 0.5, height: 30, backgroundColor: '#3d2200' },
+  matchStatusText: { color: '#fdba74', textAlign: 'center', fontSize: 12, marginBottom: 6 },
+  venueText: { color: '#a16207', textAlign: 'center', fontSize: 12, marginBottom: 2 },
   batterRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   batterText: { color: '#fff', fontSize: 13 },
   batterItem: { flex: 1 },
   batterName: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
-  batterStatus: { color: '#fde68a', fontSize: 11, marginTop: 2 },
-  dismissedRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.2)', marginTop: 4 },
-  dismissedName: { color: '#bbf7d0', fontSize: 12 },
+  batterStatus: { color: '#fb923c', fontSize: 11, marginTop: 2 },
+  dismissedRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3, borderTopWidth: 0.5, borderTopColor: '#3d2200', marginTop: 4 },
+  dismissedName: { color: '#92400e', fontSize: 12 },
   dismissedScore: { color: '#fca5a5', fontSize: 12 },
-  bowlerText: { color: '#fde68a', fontSize: 13, marginTop: 4, fontWeight: '600' },
+  bowlerText: { color: '#fb923c', fontSize: 13, marginTop: 4, fontWeight: '600' },
 
   sectionTitle: { color: '#fff', fontWeight: 'bold', fontSize: 14, marginBottom: 8 },
-  label: { color: '#bbf7d0', marginTop: 8, fontSize: 13 },
-  emptyHint: { color: '#86efac', fontSize: 13, paddingVertical: 4 },
+  label: { color: '#fdba74', marginTop: 8, fontSize: 13 },
+  emptyHint: { color: '#92400e', fontSize: 13, paddingVertical: 4 },
 
   tableRow: { flexDirection: 'row', paddingVertical: 4 },
-  tableHead: { flex: 1, color: '#86efac', fontSize: 12, fontWeight: 'bold' },
+  tableHead: { flex: 1, color: '#fb923c', fontSize: 12, fontWeight: 'bold' },
   tableCell: { flex: 1, color: '#fff', fontSize: 13 },
 
   input: {
-    backgroundColor: 'rgba(0,0,0,0.25)', color: '#fff',
+    backgroundColor: '#2a1800', color: '#fff',
     padding: 12, borderRadius: 10, marginBottom: 10,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)'
+    borderWidth: 1, borderColor: '#3d2200'
   },
 
   row: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 6, gap: 6 },
 
   btn: {
-    backgroundColor: '#166534', paddingVertical: 16, paddingHorizontal: 8,
+    backgroundColor: '#2a1800', paddingVertical: 16, paddingHorizontal: 8,
     borderRadius: 12, flex: 1, alignItems: 'center',
-    borderWidth: 1.5, borderColor: '#22c55e',
-    shadowColor: '#000', shadowOffset: {width:0,height:2}, shadowOpacity: 0.3, shadowRadius: 4,
+    borderWidth: 1.5, borderColor: '#f97316',
     elevation: 4,
   },
   sectionLabel: { paddingHorizontal: 4, marginTop: 6, marginBottom: 2 },
   extraHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 12,
-    marginTop: 6, marginBottom: 2, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)'
+    backgroundColor: '#2a1800', borderRadius: 10, padding: 12,
+    marginTop: 6, marginBottom: 2, borderWidth: 1, borderColor: '#3d2200'
   },
   extraHeaderText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  freeHitBadge: { backgroundColor: '#f59e0b', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
-  freeHitText: { color: '#000', fontSize: 10, fontWeight: 'bold' },
-  sectionLabelText: { color: '#86efac', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
+  freeHitBadge: { backgroundColor: '#f97316', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
+  freeHitText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+  sectionLabelText: { color: '#fb923c', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
   btnSmall: {
-    backgroundColor: 'rgba(0,0,0,0.3)', paddingVertical: 12, paddingHorizontal: 6,
+    backgroundColor: '#2a1800', paddingVertical: 12, paddingHorizontal: 6,
     borderRadius: 10, flex: 1, alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1, borderColor: '#3d2200',
     elevation: 2,
   },
-  btnTwo: { backgroundColor: '#0369a1', borderColor: '#38bdf8' },
+  btnTwo: { backgroundColor: '#1c3a5c', borderColor: '#38bdf8' },
   navBtn: {
     flex: 1, paddingVertical: 12, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1, borderColor: '#3d2200',
+    backgroundColor: '#2a1800',
   },
-  navBtnText: { color: '#fff', fontWeight: '700', fontSize: 11, textAlign: 'center' },
-  btnFour: { backgroundColor: '#166534', borderColor: '#4ade80' },
-  btnSix: { backgroundColor: '#6b21a8', borderColor: '#c084fc' },
-  btnRed: { backgroundColor: '#991b1b', borderColor: '#f87171' },
-  btnUndo: { backgroundColor: 'rgba(0,0,0,0.4)', borderColor: 'rgba(255,255,255,0.3)' },
+  navBtnText: { color: '#fdba74', fontWeight: '700', fontSize: 11, textAlign: 'center' },
+  btnFour: { backgroundColor: '#1a3000', borderColor: '#22c55e' },
+  btnSix: { backgroundColor: '#2a0a30', borderColor: '#d946ef' },
+  btnRed: { backgroundColor: '#7f1d1d', borderColor: '#f87171' },
+  btnUndo: { backgroundColor: '#111', borderColor: '#3d2200' },
   btnBlue: {
-    backgroundColor: '#0369a1', padding: 12, borderRadius: 10,
+    backgroundColor: '#1c3a5c', padding: 12, borderRadius: 10,
     alignItems: 'center', marginBottom: 14,
     borderWidth: 1, borderColor: '#38bdf8', elevation: 3,
   },
   btnGreen: {
-    backgroundColor: '#15803d', padding: 15, borderRadius: 12,
+    backgroundColor: '#f97316', padding: 15, borderRadius: 12,
     alignItems: 'center', marginTop: 6,
-    borderWidth: 1.5, borderColor: '#4ade80', elevation: 4,
+    borderWidth: 1.5, borderColor: '#fdba74', elevation: 4,
   },
-  btnText: { color: '#fff', fontWeight: 'bold', fontSize: 13, textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: {width:0,height:1}, textShadowRadius: 2 },
+  btnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
 
   overRow: { marginBottom: 10 },
-  overLabel: { color: '#86efac', fontSize: 12, marginBottom: 4, fontWeight: '600' },
+  overLabel: { color: '#fb923c', fontSize: 12, marginBottom: 4, fontWeight: '600' },
   overBalls: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   ballBubble: {
-    backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 8,
+    backgroundColor: '#2a1800', borderRadius: 8,
     paddingHorizontal: 10, paddingVertical: 5,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1, borderColor: '#3d2200',
   },
-  ballBubbleText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  ballBubbleText: { color: '#fdba74', fontSize: 11, fontWeight: '600' },
 
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.75)',
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.8)',
     justifyContent: 'center', alignItems: 'center'
   },
   modalCard: {
-    backgroundColor: '#166534', borderRadius: 16,
+    backgroundColor: '#2a1800', borderRadius: 16,
     padding: 20, width: '85%',
-    borderWidth: 1.5, borderColor: '#22c55e',
+    borderWidth: 1.5, borderColor: '#f97316',
   },
   modalTitle: { color: '#fff', fontWeight: 'bold', fontSize: 16, marginBottom: 12 },
   modalBox: {
-    backgroundColor: '#166534', borderRadius: 16,
+    backgroundColor: '#2a1800', borderRadius: 16,
     padding: 20, width: '85%',
-    borderWidth: 1.5, borderColor: '#22c55e',
+    borderWidth: 1.5, borderColor: '#f97316',
   },
   pickerWrap: {
-    backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 10,
-    marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#1a1008', borderRadius: 10,
+    marginBottom: 12, borderWidth: 1, borderColor: '#3d2200',
   },
 });

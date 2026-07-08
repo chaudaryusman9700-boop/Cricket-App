@@ -64,22 +64,22 @@ export default function HomeScreen() {
   const [batsmenStats, setBatsmenStats] = useState(resumeData?.batsmenStats || {});
   const [bowlerStats, setBowlerStats] = useState(resumeData?.bowlerStats || {});
   const [newPlayer, setNewPlayer] = useState('');
+  const [newBowlerName, setNewBowlerName] = useState('');
+  // ── Batting ──
   const [showNewBatsmanModal, setShowNewBatsmanModal] = useState(false);
+  const [selectedNewBatsman, setSelectedNewBatsman] = useState('');
+  const [dismissedBatsmen, setDismissedBatsmen] = useState([]);
+  const [retiredHurtBatsmen, setRetiredHurtBatsmen] = useState([]);
+  const [showRetiredHurtModal, setShowRetiredHurtModal] = useState(false);
+  // ── Bowling ──
   const [showBowlerModal, setShowBowlerModal] = useState(false);
   const [selectedNewBowler, setSelectedNewBowler] = useState('');
-  const [bowlerTypes, setBowlerTypes] = useState({}); // tracks spinner/fast/medium per bowler
+  const [bowlerTypes, setBowlerTypes] = useState({});
   const [selectedBowlerType, setSelectedBowlerType] = useState('Fast');
-  const [retiredHurtBatsmen, setRetiredHurtBatsmen] = useState([]);
-  const [bowlerTypes, setBowlerTypes] = useState({}); // { 'Ahmed': 'pacer', 'Saad': 'spinner' }
+  // ── Extras ──
   const [showWides, setShowWides] = useState(false);
   const [showNoBalls, setShowNoBalls] = useState(false);
   const [showByes, setShowByes] = useState(false);
-  const [showRetiredHurtModal, setShowRetiredHurtModal] = useState(false);
-  const [selectedNewBatsman, setSelectedNewBatsman] = useState('');
-  const [dismissedBatsmen, setDismissedBatsmen] = useState([]);
-  const [bowlerTypes, setBowlerTypes] = useState({}); // { 'Ahmed': 'pacer', 'Ali': 'spinner' }
-  const [showBowlerTypeModal, setShowBowlerTypeModal] = useState(false);
-  const [pendingBowlerName, setPendingBowlerName] = useState('');
   const [inningsOver, setInningsOver] = useState(false);
   // For new match (setup passed) always start innings at 1
   const [innings, setInnings] = useState(
@@ -863,6 +863,33 @@ export default function HomeScreen() {
                 ⚠️ Same bowler cannot bowl consecutive overs
               </Text>
             )}
+
+            {/* ── Add new bowler on the fly ── */}
+            <Text style={styles.label}>Can't find bowler? Add new:</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              <TextInput
+                style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                value={newBowlerName}
+                onChangeText={setNewBowlerName}
+                placeholder="Enter bowler name"
+                placeholderTextColor="#92400e"
+              />
+              <TouchableOpacity
+                style={[styles.btnBlue, { marginBottom: 0, paddingHorizontal: 16 }]}
+                onPress={() => {
+                  const name = newBowlerName.trim();
+                  if (!name) return;
+                  setMatch(prev => ({
+                    ...prev,
+                    bowlingPlayers: [...(prev.bowlingPlayers || []), name],
+                  }));
+                  setSelectedNewBowler(name);
+                  setNewBowlerName('');
+                }}
+              >
+                <Text style={styles.btnText}>+ Add</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* ── Bowler type selection ── */}
             <Text style={styles.label}>Bowler type</Text>

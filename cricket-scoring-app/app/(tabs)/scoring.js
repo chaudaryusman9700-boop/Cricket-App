@@ -76,6 +76,8 @@ export default function HomeScreen() {
   const [selectedNewBowler, setSelectedNewBowler] = useState('');
   const [bowlerTypes, setBowlerTypes] = useState({});
   const [selectedBowlerType, setSelectedBowlerType] = useState('Fast');
+  const [showBowlerTypeModal, setShowBowlerTypeModal] = useState(false);
+  const [pendingBowlerName, setPendingBowlerName] = useState('');
   // ── Extras ──
   const [showWides, setShowWides] = useState(false);
   const [showNoBalls, setShowNoBalls] = useState(false);
@@ -865,7 +867,7 @@ export default function HomeScreen() {
             )}
 
             {/* ── Add new bowler on the fly ── */}
-            <Text style={styles.label}>Can't find bowler? Add new:</Text>
+            <Text style={styles.label}>Can&apos;t find bowler? Add new:</Text>
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
               <TextInput
                 style={[styles.input, { flex: 1, marginBottom: 0 }]}

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Speech from 'expo-speech';
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -79,7 +80,14 @@ export default function HomeScreen() {
   const [showBowlerTypeModal, setShowBowlerTypeModal] = useState(false);
   const [pendingBowlerName, setPendingBowlerName] = useState('');
   // ── Extras ──
+  // ── Voice Commentary ──
+  const [voiceOn, setVoiceOn] = useState(false);
+  const [voiceLang, setVoiceLang] = useState('en'); // 'en' or 'ur'
+  // ── 🎙️ Voice Commentary ──
+  const [commentaryLang, setCommentaryLang] = useState('en'); // 'en' or 'ur'
   const [showWides, setShowWides] = useState(false);
+  // ── 🎙️ Voice Commentary ──
+  const [commentaryOn, setCommentaryOn] = useState(false);
   const [showNoBalls, setShowNoBalls] = useState(false);
   const [showByes, setShowByes] = useState(false);
   const [inningsOver, setInningsOver] = useState(false);
@@ -130,6 +138,89 @@ export default function HomeScreen() {
     }
   };
 
+  // ── 🎙️ Voice Commentary ──
+  const speakPair = (textEn, textUr) => {
+    if (!commentaryOn) return;
+    Speech.stop();
+    const text = commentaryLang === 'ur' ? (textUr || textEn) : textEn;
+    Speech.speak(text, {
+      language: commentaryLang === 'ur' ? 'ur-PK' : 'en-IN',
+      pitch: 1.0,
+      rate: commentaryLang === 'ur' ? 0.85 : 0.95,
+    });
+  };
+
+  // ── Commentary messages per ball type ──
+  const getCommentaryLegacy2 = (type, run, updated) => {
+    const batter = updated.striker || 'Batsman';
+    const bowler = updated.bowler || 'Bowler';
+    const score = `${updated.runs} for ${updated.wickets}`;
+    const oversDone = `${Math.floor(updated.balls / 6)} point ${updated.balls % 6}`;
+
+    if (type === 'run') {
+      if (run === 6) return {
+        en: `Six! Magnificent shot by ${batter}! That's a maximum!`,
+        ur: `چھکا! ${batter} کا شاندار شاٹ! یہ چھ رنز ہیں!`
+      };
+      if (run === 4) return {
+        en: `Four! Beautiful boundary by ${batter}!`,
+        ur: `چار! ${batter} کی خوبصورت باؤنڈری!`
+      };
+      if (run === 3) return {
+        en: `Three runs! Good running between the wickets!`,
+        ur: `تین رنز! وکٹوں کے درمیان اچھی دوڑ!`
+      };
+      if (run === 2) return {
+        en: `Two runs! ${batter} pushes it through the gap.`,
+        ur: `دو رنز! ${batter} نے گیپ میں شاٹ لگایا۔`
+      };
+      if (run === 1) return {
+        en: `One run, ${batter} rotates the strike.`,
+        ur: `ایک رن، ${batter} نے اسٹرائک گھمائی۔`
+      };
+    }
+    if (type === 'dot') return {
+      en: `Dot ball! Excellent delivery from ${bowler}!`,
+      ur: `ڈاٹ بال! ${bowler} کی شاندار گیند!`
+    };
+    if (type === 'wicket') return {
+      en: `Wicket! ${batter} is out! ${bowler} gets the breakthrough! Score is ${score}.`,
+      ur: `وکٹ! ${batter} آؤٹ ہو گئے! ${bowler} نے کامیابی حاصل کی! اسکور ${score} ہے۔`
+    };
+    if (type === 'wide') return {
+      en: `Wide ball! Extra run for the batting side.`,
+      ur: `وائیڈ بال! بیٹنگ سائیڈ کو ایک اضافی رن!`
+    };
+    if (type === 'noBall') return {
+      en: `No ball! Free hit coming up!`,
+      ur: `نو بال! فری ہٹ آ رہی ہے!`
+    };
+    if (type === 'noBallRun') return {
+      en: `No ball and ${run} runs! Expensive delivery from ${bowler}!`,
+      ur: `نو بال اور ${run} رنز! ${bowler} کی مہنگی گیند!`
+    };
+    if (type === 'bye') return {
+      en: `${run} bye${run > 1 ? 's' : ''}! Gets past the keeper.`,
+      ur: `${run} بائی! وکٹ کیپر سے آگے نکل گئی!`
+    };
+    if (type === 'wideRun') return {
+      en: `Wide and ${run} run${run > 1 ? 's' : ''}! Costly delivery!`,
+      ur: `وائیڈ اور ${run} رنز! مہنگی گیند!`
+    };
+    return null;
+  };
+
+  // ── End of over commentary ──
+  const speakEndOfOver = (updated) => {
+    if (!commentaryOn) return;
+    const overNum = Math.floor(updated.balls / 6);
+    const score = `${updated.runs} for ${updated.wickets}`;
+    const oversLeft = updated.totalOvers - overNum;
+    const textEn = `End of over ${overNum}! Score is ${score}. ${oversLeft} over${oversLeft !== 1 ? 's' : ''} remaining.`;
+    const textUr = `اوور ${overNum} ختم! اسکور ${score} ہے۔ ${oversLeft} اوور باقی ہیں۔`;
+    speak(textEn, textUr);
+  };
+
   // ── Auto save silently when match ends ──
   const autoSaveMatch = async (matchData, bStats, bwStats) => {
     try {
@@ -170,6 +261,63 @@ export default function HomeScreen() {
   };
 
   // ─── ADD PLAYER ─────────────────────────────────────────────────
+  // ── 🎙️ Voice Commentary ──
+  const speakLegacy = (enText, urText) => {
+    if (!commentaryOn) return;
+    const text = commentaryLang === 'ur' ? urText : enText;
+    Speech.stop();
+    Speech.speak(text, {
+      language: commentaryLang === 'ur' ? 'ur-PK' : 'en-IN',
+      pitch: 1.1,
+      rate: 0.95,
+    });
+  };
+
+  const getCommentaryLegacy = (type, run, updated) => {
+    const striker = updated?.striker || match.striker || 'Batsman';
+    const bowler = updated?.bowler || match.bowler || 'Bowler';
+
+    if (type === 'run') {
+      if (run === 6) speak(`Six! What a shot by ${striker}! Magnificent!`, `Chha! Kya zabardast shot hai ${striker} ka!`);
+      else if (run === 4) speak(`Four! Beautiful boundary by ${striker}!`, `Chaar! Khubsoorat boundary ${striker} ki taraf se!`);
+      else if (run === 3) speak(`Three runs! Well run!`, `Teen runs! Achi running!`);
+      else if (run === 2) speak(`Two runs taken.`, `Do runs liye gaye.`);
+      else if (run === 1) speak(`One run.`, `Ek run.`);
+    } else if (type === 'dot') {
+      speak(`Dot ball. Good delivery from ${bowler}.`, `Dot ball. ${bowler} ki achi ball.`);
+    } else if (type === 'wicket') {
+      speak(
+        `Wicket! ${striker} is out! Great bowling by ${bowler}!`,
+        `Wicket! ${striker} out ho gaya! ${bowler} ki zabardast bowling!`
+      );
+    } else if (type === 'wide') {
+      speak(`Wide ball! Extra run.`, `Wide ball! Ek extra run.`);
+    } else if (type === 'noBall') {
+      speak(`No ball! Free hit next delivery!`, `No ball! Agla ball free hit hai!`);
+    } else if (type === 'bye') {
+      speak(`Bye! ${run} run${run > 1 ? 's' : ''}.`, `Bye! ${run} run.`);
+    }
+    // End of over
+    if (updated && updated.balls > 0 && updated.balls % 6 === 0) {
+      const overNum = Math.floor(updated.balls / 6);
+      setTimeout(() => speak(
+        `End of over ${overNum}. Score: ${updated.runs} for ${updated.wickets}.`,
+        `Over ${overNum} khatam. Score: ${updated.runs} runs, ${updated.wickets} wickets.`
+      ), 1500);
+    }
+    // Exciting finish
+    if (updated && match.target) {
+      const needed = match.target - updated.runs;
+      const ballsLeft = (updated.totalOvers * 6) - updated.balls;
+      if (needed > 0 && needed <= 10 && ballsLeft <= 12) {
+        setTimeout(() => speak(
+          `${needed} needed off ${ballsLeft} balls! What a finish!`,
+          `${needed} runs chahiye ${ballsLeft} balls mein! Kamal ka muqabala!`
+        ), 2000);
+      }
+    }
+  };
+
   const addPlayer = (team = 'batting') => {
     const name = newPlayer.trim();
     if (!name) return;
@@ -201,6 +349,69 @@ export default function HomeScreen() {
     setPendingBowlerName('');
   };
 
+
+
+  const getCommentaryLegacy3 = (type, run, updated) => {
+    const batsman = updated.striker || 'Batsman';
+    const bowler = updated.bowler || 'Bowler';
+    const score = `${updated.runs} for ${updated.wickets}`;
+    const scoreUr = `${updated.runs} رنز ${updated.wickets} وکٹ`;
+
+    if (type === 'run') {
+      if (run === 6) return [
+        `SIX! What a shot by ${batsman}! That's gone all the way!`,
+        `چھکا! ${batsman} کا زبردست شاٹ! گیند باؤنڈری سے باہر!`
+      ];
+      if (run === 4) return [
+        `FOUR! Magnificent stroke by ${batsman}! Ball races to the boundary!`,
+        `چوکا! ${batsman} کا خوبصورت شاٹ! باؤنڈری!`
+      ];
+      if (run === 3) return [
+        `Three runs! Good running between the wickets!`,
+        `تین رنز! اچھی دوڑ!`
+      ];
+      if (run === 2) return [
+        `Two runs! Good placement by ${batsman}!`,
+        `دو رنز! ${batsman} کا اچھا شاٹ!`
+      ];
+      if (run === 1) return [
+        `One run, good rotation of strike!`,
+        `ایک رن!`
+      ];
+    }
+    if (type === 'dot') return [
+      `Dot ball! Excellent delivery from ${bowler}! No run!`,
+      `ڈاٹ بال! ${bowler} کی شاندار گیند! کوئی رن نہیں!`
+    ];
+    if (type === 'wicket') return [
+      `WICKET! ${batsman} is OUT! ${bowler} strikes! Score is ${score}!`,
+      `وکٹ! ${batsman} آؤٹ! ${bowler} نے وکٹ لی! اسکور ${scoreUr}!`
+    ];
+    if (type === 'wide') return [
+      `Wide ball! Extra run to the batting team!`,
+      `وائیڈ گیند! ایک اضافی رن!`
+    ];
+    if (type === 'noBall') return [
+      `No ball! Free hit on the next delivery!`,
+      `نو بال! اگلی گیند فری ہٹ ہوگی!`
+    ];
+    if (type === 'bye') return [
+      `${run} bye! The ball gets past the keeper!`,
+      `${run} بائی رنز!`
+    ];
+    return ['', ''];
+  };
+
+  const getOverEndCommentary = (updated) => {
+    const overNum = Math.floor(updated.balls / 6);
+    const score = `${updated.runs} for ${updated.wickets}`;
+    const scoreUr = `${updated.runs} رنز ${updated.wickets} وکٹ`;
+    return [
+      `End of over ${overNum}! Score is ${score}! Run rate: ${(updated.runs / (updated.balls / 6)).toFixed(2)}!`,
+      `اوور ${overNum} ختم! اسکور ${scoreUr}! رن ریٹ ${(updated.runs / (updated.balls / 6)).toFixed(2)}!`
+    ];
+  };
+
   // ─── UNDO LAST BALL ─────────────────────────────────────────────
   const undoLastBall = () => {
     if (!match.snapshots || match.snapshots.length === 0) {
@@ -224,6 +435,40 @@ export default function HomeScreen() {
   };
 
   // ─── CORE ENGINE ────────────────────────────────────────────────
+  // ── Voice Commentary ──
+  const speak = (text) => {
+    if (!commentaryOn) return;
+    Speech.stop();
+    Speech.speak(text, {
+      language: commentaryLang === 'ur' ? 'ur-PK' : 'en-IN',
+      pitch: 1.0,
+      rate: commentaryLang === 'ur' ? 0.85 : 0.95,
+    });
+  };
+
+  const getCommentaryText = (type, run, updated) => {
+    const batsman = updated.striker || 'Batsman';
+    const bowler = updated.bowler || 'Bowler';
+    const score = `${updated.runs} for ${updated.wickets}`;
+    const isUrdu = commentaryLang === 'ur';
+
+    if (type === 'run') {
+      if (run === 1) return isUrdu ? `ایک رن! ${batsman}` : `1 run to ${batsman}`;
+      if (run === 2) return isUrdu ? `دو رن! ${batsman}` : `2 runs! Good cricket by ${batsman}`;
+      if (run === 3) return isUrdu ? `تین رن! شاندار دوڑ` : `3 runs! Excellent running`;
+      if (run === 4) return isUrdu ? `چوکا! ${batsman} کا شاندار شاٹ!` : `FOUR! Beautiful shot by ${batsman}!`;
+      if (run === 6) return isUrdu ? `چھکا! ${batsman} نے میدان کے باہر بھیج دیا!` : `SIX! ${batsman} hits it out of the park!`;
+    }
+    if (type === 'dot') return isUrdu ? `ڈاٹ بال۔ ${bowler} کی اچھی گیند` : `Dot ball. Good delivery by ${bowler}`;
+    if (type === 'wicket') return isUrdu ? `آؤٹ! ${batsman} کو ${bowler} نے آؤٹ کر دیا! سکور ${score}` : `WICKET! ${batsman} is OUT! ${bowler} strikes! Score is ${score}`;
+    if (type === 'wide') return isUrdu ? `وائیڈ بال! ایک اضافی رن` : `Wide ball! 1 extra run`;
+    if (type === 'wideRun') return isUrdu ? `وائیڈ اور ${run} رن!` : `Wide and ${run} runs!`;
+    if (type === 'noBall') return isUrdu ? `نو بال! فری ہٹ آ رہی ہے!` : `No ball! FREE HIT on the next delivery!`;
+    if (type === 'noBallRun') return isUrdu ? `نو بال اور ${run} رن! فری ہٹ!` : `No ball and ${run} runs! Free hit next!`;
+    if (type === 'bye') return isUrdu ? `${run} بائی رن` : `${run} bye${run > 1 ? 's' : ''}`;
+    return '';
+  };
+
   const addBall = (type, run = 0) => {
 
     // Check match is over
@@ -352,6 +597,12 @@ export default function HomeScreen() {
     if (isLegalBall && updated.balls % 6 === 0 && updated.balls > 0) {
       // ── End of over: swap striker + show bowler change modal ──
       [updated.striker, updated.nonStriker] = [updated.nonStriker, updated.striker];
+      const overNum2 = Math.floor(updated.balls / 6);
+      const overScore = `${updated.runs} for ${updated.wickets}`;
+      speak(commentaryLang === 'ur'
+        ? `اوور ${overNum2} مکمل! سکور ${overScore} ہے۔ نیا بولر آ رہا ہے`
+        : `End of over ${overNum2}! Score is ${overScore}. New bowler coming in.`
+      );
       const overNum = Math.floor(updated.balls / 6);
       const maxOversPerBowler = Math.floor(updated.totalOvers / 5) || 1;
 
@@ -395,6 +646,9 @@ export default function HomeScreen() {
 
     setBatsmenStats(newBatsmenStats);
     setBowlerStats(newBowlerStats);
+
+    // ── 🎙️ Voice Commentary ──
+    speak(getCommentaryText(type, run, updated));
 
     // ── Check if match is over after every ball ──
     if (checkMatchResult(updated)) return;
@@ -867,7 +1121,7 @@ export default function HomeScreen() {
             )}
 
             {/* ── Add new bowler on the fly ── */}
-            <Text style={styles.label}>Can&apos;t find bowler? Add new:</Text>
+            <Text style={styles.label}>{"Can't find bowler? Add new:"}</Text>
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
               <TextInput
                 style={[styles.input, { flex: 1, marginBottom: 0 }]}
@@ -1115,7 +1369,67 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      <Text style={styles.title}>🏏 Cricket Scoring</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        {/* ── 🎙️ Commentary Toggle ── */}
+        <View style={styles.commentaryBar}>
+          <TouchableOpacity
+            style={[styles.commentaryToggle, commentaryOn && styles.commentaryToggleOn]}
+            onPress={() => { if (commentaryOn) Speech.stop(); setCommentaryOn(!commentaryOn); }}
+          >
+            <Text style={styles.commentaryToggleText}>
+              {commentaryOn ? '🎙️ ON' : '🔇 OFF'}
+            </Text>
+          </TouchableOpacity>
+          {commentaryOn && (
+            <View style={styles.langRow}>
+              <TouchableOpacity
+                style={[styles.langBtn, commentaryLang === 'en' && styles.langBtnActive]}
+                onPress={() => setCommentaryLang('en')}
+              >
+                <Text style={styles.langBtnText}>🇬🇧 EN</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.langBtn, commentaryLang === 'ur' && styles.langBtnActive]}
+                onPress={() => setCommentaryLang('ur')}
+              >
+                <Text style={styles.langBtnText}>🇵🇰 UR</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          <Text style={styles.title}>🏏 Live Scoring</Text>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          {commentaryOn && (
+            <TouchableOpacity
+              style={{
+                paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+                backgroundColor: commentaryLang === 'en' ? '#f97316' : '#2a1800',
+                borderWidth: 1, borderColor: '#f97316',
+              }}
+              onPress={() => setCommentaryLang(commentaryLang === 'en' ? 'ur' : 'en')}
+            >
+              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>
+                {commentaryLang === 'en' ? '🇬🇧 EN' : '🇵🇰 UR'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={{
+              paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+              backgroundColor: commentaryOn ? '#f97316' : '#2a1800',
+              borderWidth: 1.5, borderColor: '#f97316',
+            }}
+            onPress={() => {
+              if (commentaryOn) Speech.stop();
+              setCommentaryOn(prev => !prev);
+            }}
+          >
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>
+              {commentaryOn ? '🔊 Voice ON' : '🔇 Voice OFF'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* ── SCOREBOARD ── */}
       <View style={styles.card}>
@@ -1488,6 +1802,25 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   // ── 🔥 SUNSET ORANGE THEME ──
   container: { flex: 1, backgroundColor: '#1a1008', padding: 16 },
+  commentaryBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 },
+  commentaryToggle: { flex: 1, padding: 10, borderRadius: 10, backgroundColor: '#2a1800', borderWidth: 1, borderColor: '#78350f', alignItems: 'center' },
+  commentaryToggleOn: { backgroundColor: '#f97316', borderColor: '#fdba74' },
+  commentaryToggleText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  voiceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 },
+  voiceToggle: {
+    flex: 1, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 24,
+    backgroundColor: '#2a1800', borderWidth: 1.5, borderColor: '#78350f',
+    alignItems: 'center',
+  },
+  voiceToggleOn: { backgroundColor: '#f97316', borderColor: '#fdba74' },
+  voiceToggleText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  langRow: { flexDirection: 'row', gap: 6 },
+  langBtn: {
+    paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20,
+    backgroundColor: '#2a1800', borderWidth: 1, borderColor: '#78350f',
+  },
+  langBtnActive: { backgroundColor: '#f97316', borderColor: '#fdba74' },
+  langBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   title: { fontSize: 24, color: '#fff', textAlign: 'center', marginBottom: 20, fontWeight: 'bold' },
 
   card: { backgroundColor: '#2a1800', padding: 15, borderRadius: 15, marginBottom: 14, borderWidth: 1, borderColor: '#3d2200' },
